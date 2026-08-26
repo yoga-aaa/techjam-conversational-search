@@ -33,6 +33,7 @@ class SessionState:
     excluded_terms: set[str] = field(default_factory=set)
     no_preference_attributes: set[str] = field(default_factory=set)
     asked_attributes: list[str] = field(default_factory=list)
+    pending_attribute: str | None = None
     messages: list[str] = field(default_factory=list)
     active_context: list[str] = field(default_factory=list)
 
