@@ -5,7 +5,7 @@
     "candidate_k": 100,
     "probe_overload_threshold": 2000,
     "dense_enabled": false,
-    "structured_enabled": false
+    "structured_enabled": true
   },
   "ranking": {"implementation": "heuristic"},
   "policy": {

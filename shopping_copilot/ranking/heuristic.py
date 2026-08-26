@@ -34,11 +34,12 @@ class HeuristicRanker:
             if product is None:
                 continue
             text = product.searchable_text.lower()
-            constraint_score = (
+            text_constraint_score = (
                 sum(value in text for value in constraint_values) / len(constraint_values)
                 if constraint_values
                 else 0.0
             )
+            constraint_score = max(text_constraint_score, candidate.constraint_score)
             profile_score = (
                 sum(term in text for term in state.profile_terms) / len(state.profile_terms)
                 if state.profile_terms

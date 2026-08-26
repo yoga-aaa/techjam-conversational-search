@@ -45,6 +45,7 @@ class SearchPlan:
     route: str
     lexical_terms: tuple[str, ...]
     semantic_query: str
+    structured_constraints: dict[str, tuple[str, ...]]
     hard_filters: dict[str, Any]
     excluded_terms: tuple[str, ...]
     bm25_weight: float
@@ -53,6 +54,7 @@ class SearchPlan:
     profile_weight: float
     candidate_k: int
     use_dense: bool
+    use_structured: bool
     diversity_enabled: bool
 
 

@@ -14,6 +14,7 @@ from shopping_copilot.response.builder import OfficialResponseBuilder
 from shopping_copilot.retrieval.bm25 import BM25Retriever
 from shopping_copilot.retrieval.dense import DisabledDenseRetriever
 from shopping_copilot.retrieval.hybrid import HybridRetriever
+from shopping_copilot.retrieval.structured import StructuredRetriever
 from shopping_copilot.state.rule_state import RuleStateTracker
 
 
@@ -34,7 +35,12 @@ def build_components(catalog_path: str | Path, config: AppConfig) -> Components:
     store = CatalogStore(catalog_path)
     lexical = BM25Retriever(store)
     dense = DisabledDenseRetriever()
-    retriever = HybridRetriever(lexical=lexical, dense=dense)
+    structured: Retriever = (
+        StructuredRetriever(store)
+        if config.search.structured_enabled
+        else DisabledDenseRetriever()
+    )
+    retriever = HybridRetriever(lexical=lexical, dense=dense, structured=structured)
     trace_sink: TraceSink = JsonlTraceSink(config.trace.path) if config.trace.enabled else NullTraceSink()
     return Components(
         state_tracker=RuleStateTracker(),

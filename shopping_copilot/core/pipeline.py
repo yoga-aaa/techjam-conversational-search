@@ -42,6 +42,7 @@ class ShoppingCopilotAgent:
                 plan,
                 candidate_k=max(10, early_decision.recommendation_count),
                 use_dense=False,
+                use_structured=False,
             )
             result = self.components.retriever.retrieve(search_plan)
             ranked = self.components.ranker.rank(state, search_plan, result)

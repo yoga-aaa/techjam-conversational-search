@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 
 from evaluator.local_evaluator import catalog_index, evaluate
+from shopping_copilot.core.config import load_config
+from shopping_copilot.core.factory import build_components
 from shopping_copilot.state.rule_state import RuleStateTracker
 from starter.agent import Agent
 
@@ -113,6 +115,26 @@ class TeamPipelineTest(unittest.TestCase):
 
         self.assertEqual(state.active_slots["feature"], ["machine washable"])
         self.assertEqual(state.intent_mode, "buying")
+
+    def test_structured_route_contributes_candidates_when_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = self._catalog(Path(directory))
+            config = load_config("configs/experiments/structured_hybrid.json")
+            components = build_components(catalog, config)
+            state = components.state_tracker.reset("structured", PROFILE)
+            state = components.state_tracker.update(
+                "structured",
+                "I'm looking for shoes. A key requirement is: waterproof.",
+                1,
+            )
+            plan = components.planner.build(state)
+
+            result = components.retriever.retrieve(plan)
+            by_id = {candidate.parent_asin: candidate for candidate in result.candidates}
+
+            self.assertTrue(plan.use_structured)
+            self.assertIn("A", by_id)
+            self.assertIn("structured", by_id["A"].source_routes)
 
     def test_browsing_turn_asks_a_structured_question(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
