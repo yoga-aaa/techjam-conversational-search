@@ -2,6 +2,41 @@
 
 Build an AI shopping agent that asks useful follow-up questions and recommends the customer's hidden target product within at most 10 turns.
 
+## Team Development Architecture
+
+This fork keeps the official evaluator and data contract unchanged and places the
+team implementation behind the required `starter.agent.Agent` entry point.
+
+```text
+official evaluator
+  -> starter/agent.py
+  -> stable pipeline
+  -> state -> planning -> candidate search -> ranking -> policy
+  -> official response
+```
+
+The default configuration is fully offline and uses rule-based conversation state,
+SQLite FTS5/BM25 candidate search, deterministic reranking, and a deterministic
+clarification policy. Dense retrieval and model-backed implementations can be added
+behind the stable interfaces in `shopping_copilot/core/interfaces.py` and selected
+through config without changing the pipeline.
+
+Run the team tests without downloading the full catalog:
+
+```bash
+python -m unittest discover -s tests -p "test*.py" -v
+```
+
+After downloading and verifying the official catalog, run an explicit experiment:
+
+```bash
+python scripts/verify_data.py --catalog data/catalog.jsonl
+python scripts/run_evaluation.py --config configs/baseline.json --output results.json
+```
+
+See `docs/team/architecture.md` for module boundaries and
+`docs/team/ownership.md` for the five-person ownership model.
+
 ## What You Receive
 
 - A frozen catalog of 50,000 products from the `Clothing_Shoes_and_Jewelry` category of Amazon Reviews 2023.

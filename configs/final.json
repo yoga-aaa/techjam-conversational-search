@@ -1,0 +1,17 @@
+{
+  "state": {"implementation": "rule"},
+  "search": {
+    "implementation": "hybrid",
+    "candidate_k": 100,
+    "probe_overload_threshold": 2000,
+    "dense_enabled": false
+  },
+  "ranking": {"implementation": "heuristic"},
+  "policy": {
+    "implementation": "heuristic",
+    "broad_recommendation_count": 3,
+    "uncertain_recommendation_count": 5,
+    "confident_score_gap": 0.15
+  },
+  "trace": {"enabled": true, "path": "artifacts/traces.jsonl"}
+}
