@@ -34,6 +34,12 @@ python scripts/verify_data.py --catalog data/catalog.jsonl
 python scripts/run_evaluation.py --config configs/baseline.json --output results.json
 ```
 
+The current selected development configuration is `configs/final.json`. On the
+200-session public set it produced Hit Rate@10 `0.955`, MRR `0.722139`, MTTC
+`5.005`, and recommended technical score `0.814042`. These are public-set
+development results, not evidence of private-set performance. Controlled runs
+and rejected alternatives are recorded in `experiments/registry.csv`.
+
 See `docs/team/architecture.md` for module boundaries and
 `docs/team/ownership.md` for the five-person ownership model.
 
