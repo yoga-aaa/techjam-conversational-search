@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 
 from evaluator.local_evaluator import catalog_index, evaluate
+from shopping_copilot.core.config import load_config
+from shopping_copilot.core.factory import build_components
 from shopping_copilot.state.rule_state import RuleStateTracker
 from starter.agent import Agent
 
@@ -77,7 +79,62 @@ class TeamPipelineTest(unittest.TestCase):
             3,
         )
         self.assertEqual(state.active_slots["material"], ["cotton"])
-        self.assertIn("leather", state.excluded_terms)
+        self.assertNotIn("leather", state.excluded_terms)
+        self.assertNotIn("leather", state.active_context[-1].lower())
+
+    def test_pending_attribute_classifies_short_clarification_answer(self) -> None:
+        tracker = RuleStateTracker()
+        tracker.reset("s", {})
+        tracker.mark_asked("s", "material")
+
+        state = tracker.update("s", "For that, what matters is: merino wool.", 2)
+
+        self.assertEqual(state.active_slots["material"], ["merino wool"])
+        self.assertIsNone(state.pending_attribute)
+
+    def test_boundary_answer_uses_pending_attribute_without_query_pollution(self) -> None:
+        tracker = RuleStateTracker()
+        tracker.reset("s", {})
+        tracker.mark_asked("s", "color")
+
+        state = tracker.update("s", "Either is fine; please use your judgment.", 2)
+
+        self.assertIn("color", state.no_preference_attributes)
+        self.assertNotIn("color", state.active_slots)
+        self.assertEqual(state.active_context, [])
+
+    def test_key_requirement_marker_creates_feature_slot(self) -> None:
+        tracker = RuleStateTracker()
+        tracker.reset("s", {})
+
+        state = tracker.update(
+            "s",
+            "I'm looking for shirts. A key requirement is: machine washable.",
+            1,
+        )
+
+        self.assertEqual(state.active_slots["feature"], ["machine washable"])
+        self.assertEqual(state.intent_mode, "buying")
+
+    def test_structured_route_contributes_candidates_when_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = self._catalog(Path(directory))
+            config = load_config("configs/experiments/structured_hybrid.json")
+            components = build_components(catalog, config)
+            state = components.state_tracker.reset("structured", PROFILE)
+            state = components.state_tracker.update(
+                "structured",
+                "I'm looking for shoes. A key requirement is: waterproof.",
+                1,
+            )
+            plan = components.planner.build(state)
+
+            result = components.retriever.retrieve(plan)
+            by_id = {candidate.parent_asin: candidate for candidate in result.candidates}
+
+            self.assertTrue(plan.use_structured)
+            self.assertIn("A", by_id)
+            self.assertIn("structured", by_id["A"].source_routes)
 
     def test_browsing_turn_asks_a_structured_question(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

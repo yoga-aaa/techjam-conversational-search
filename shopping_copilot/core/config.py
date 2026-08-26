@@ -12,6 +12,7 @@ class SearchConfig:
     candidate_k: int
     probe_overload_threshold: int
     dense_enabled: bool
+    structured_enabled: bool
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             candidate_k=max(10, int(search.get("candidate_k", 100))),
             probe_overload_threshold=max(10, int(search.get("probe_overload_threshold", 2000))),
             dense_enabled=bool(search.get("dense_enabled", False)),
+            structured_enabled=bool(search.get("structured_enabled", False)),
         ),
         policy=PolicyConfig(
             implementation=str(policy.get("implementation", "heuristic")),

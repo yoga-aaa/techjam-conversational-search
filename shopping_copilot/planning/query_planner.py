@@ -45,6 +45,12 @@ class RuleQueryPlanner:
             except ValueError:
                 pass
 
+        structured_constraints = {
+            name: tuple(values)
+            for name, values in state.active_slots.items()
+            if name != "budget" and values
+        }
+
         if route == "buying":
             bm25_weight, dense_weight, constraint_weight, profile_weight = 0.55, 0.20, 0.20, 0.05
             diversity_enabled = False
@@ -56,6 +62,7 @@ class RuleQueryPlanner:
             route=route,
             lexical_terms=tuple(terms),
             semantic_query=" ".join(state.active_context),
+            structured_constraints=structured_constraints,
             hard_filters=hard_filters,
             excluded_terms=tuple(sorted(excluded)),
             bm25_weight=bm25_weight,
@@ -64,5 +71,6 @@ class RuleQueryPlanner:
             profile_weight=profile_weight,
             candidate_k=self.config.candidate_k,
             use_dense=self.config.dense_enabled,
+            use_structured=self.config.structured_enabled,
             diversity_enabled=diversity_enabled,
         )

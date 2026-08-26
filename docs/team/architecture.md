@@ -38,6 +38,7 @@ can affect every owner.
 - `planning/query_planner.py`: shared Buying/Browsing planning with route-specific weights;
 - `retrieval/bm25.py`: official-style SQLite FTS5 candidate search;
 - `retrieval/hybrid.py`: stable multi-route fusion point;
+- `retrieval/structured.py`: optional attribute-aware route, disabled in the selected final config after a public-set regression;
 - `ranking/heuristic.py`: offline scoring over the candidate set;
 - `policy/heuristic.py`: over-generality gate, question selection, and dynamic result count;
 - `response/builder.py`: strict official output validation;
