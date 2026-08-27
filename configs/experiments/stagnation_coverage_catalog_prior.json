@@ -24,14 +24,14 @@
     "question_min_coverage": 0.12,
     "question_min_score": 0.01,
     "question_attribute_priors": {
-      "material": 3.0,
-      "feature": 2.0,
-      "color": 1.1,
-      "style": 0.3,
-      "size": 0.3,
-      "use_case": 0.3,
-      "budget": 0.25,
-      "brand": 0.15
+      "material": 0.57302,
+      "feature": 0.95804,
+      "color": 0.42718,
+      "style": 0.16178,
+      "size": 0.07572,
+      "use_case": 0.01626,
+      "budget": 0.0053,
+      "brand": 0.0
     },
     "coverage_enabled": true,
     "coverage_candidate_limit": 60,

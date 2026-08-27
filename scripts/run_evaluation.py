@@ -11,7 +11,7 @@ from starter.agent import Agent
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run an official evaluation with an explicit team config")
-    parser.add_argument("--config", default="configs/baseline.json")
+    parser.add_argument("--config", default="configs/final.json")
     parser.add_argument("--catalog", default="data/catalog.jsonl")
     parser.add_argument("--dataset", default="data/public_set.jsonl")
     parser.add_argument("--output", default="results.json")

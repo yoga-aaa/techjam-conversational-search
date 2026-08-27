@@ -74,6 +74,12 @@ class RuleStateTracker:
                     continue
                 del state.active_slots[name]
             state.active_context = []
+            state.shown_asins.clear()
+            state.previous_candidate_ids = ()
+            state.previous_slot_signature = ()
+            state.candidate_overlap = 0.0
+            state.stagnant_candidate_turns = 0
+            state.coverage_mode = False
 
         explicit_no_preference = re.search(
             r"(?:do not|don't) have (?:an additional |a )?preference for\s+([a-z_]+)",

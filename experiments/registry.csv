@@ -4,3 +4,5 @@ dialog-state-v1,c50dae8,configs/experiments/recommend_10.json,Track pending clar
 structured-hybrid-v1,12dd28a,configs/experiments/structured_hybrid.json,Add attribute-aware structured candidate search,retrieval,0.935,0.688948,5.06,0.792984,,keep-disabled
 optimized-final-v1,12dd28a,configs/final.json,Use dialog-state gains without structured-search regression,state+policy,0.955,0.722139,5.005,0.814042,,selected
 information-gain-policy-v1,204648c,configs/final.json,Choose browsing clarification attributes from candidate information gain,policy,0.955,0.714972,4.78,0.816392,,selected
+stagnation-coverage-v1,68d1af3,configs/experiments/stagnation_coverage.json,Rotate to unseen fully reranked candidates after candidate-set stagnation and boost rare accumulated constraints,state+ranking+policy,0.98,0.713359,3.86,0.846808,,selected
+full-catalog-prior-v1,68d1af3,configs/experiments/stagnation_coverage_catalog_prior.json,Estimate answerability priors from all 50000 catalog products instead of public labels,policy,0.975,0.713351,3.875,0.844005,,keep-alternative
