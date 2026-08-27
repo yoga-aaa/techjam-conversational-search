@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "version": "1.0.0",
+  "modes": {
+    "canonical": {
+      "description": "Clear control phrasing with one stable template per event group.",
+      "groups": {
+        "initial_buying": ["initial_buying_001"],
+        "initial_browsing": ["initial_browsing_001"],
+        "initial_override": ["initial_override_001"],
+        "attribute_reply": ["attribute_reply_001"],
+        "no_preference": ["no_preference_001"],
+        "boundary": ["boundary_001"],
+        "override": ["override_002"],
+        "fallback": ["fallback_001"]
+      }
+    },
+    "explicit": {
+      "description": "Explicit attribute names and constraint wording.",
+      "groups": {
+        "initial_buying": ["initial_buying_001", "initial_buying_005"],
+        "initial_browsing": ["initial_browsing_003", "initial_browsing_006"],
+        "initial_override": ["initial_override_001", "initial_override_004"],
+        "attribute_reply": ["attribute_reply_001", "attribute_reply_005"],
+        "no_preference": ["no_preference_001", "no_preference_005"],
+        "boundary": ["boundary_001", "boundary_005"],
+        "override": ["override_001", "override_002", "override_003"],
+        "fallback": ["fallback_001", "fallback_005"]
+      }
+    },
+    "conversational": {
+      "description": "Casual and natural conversational phrasing.",
+      "groups": {
+        "initial_buying": ["initial_buying_002", "initial_buying_004"],
+        "initial_browsing": ["initial_browsing_002", "initial_browsing_005"],
+        "initial_override": ["initial_override_002", "initial_override_005"],
+        "attribute_reply": ["attribute_reply_003", "attribute_reply_006"],
+        "no_preference": ["no_preference_002", "no_preference_006"],
+        "boundary": ["boundary_002", "boundary_003"],
+        "override": ["override_004", "override_006"],
+        "fallback": ["fallback_003", "fallback_004"]
+      }
+    },
+    "contextual": {
+      "description": "Short answers that rely on the preceding question and context.",
+      "groups": {
+        "initial_buying": ["initial_buying_003", "initial_buying_006"],
+        "initial_browsing": ["initial_browsing_004", "initial_browsing_005"],
+        "initial_override": ["initial_override_003", "initial_override_005"],
+        "attribute_reply": ["attribute_reply_007", "attribute_reply_008"],
+        "no_preference": ["no_preference_003", "no_preference_004"],
+        "boundary": ["boundary_003", "boundary_004"],
+        "override": ["override_005", "override_006"],
+        "fallback": ["fallback_002", "fallback_004"]
+      }
+    }
+  }
+}

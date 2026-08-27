@@ -3,3 +3,4 @@ baseline-v0,7710c25,configs/baseline.json,Initial modular BM25 baseline,all,0.84
 dialog-state-v1,c50dae8,configs/experiments/recommend_10.json,Track pending clarification answers and erase overridden slots,state+policy,0.955,0.722139,5.005,0.814042,,keep
 structured-hybrid-v1,12dd28a,configs/experiments/structured_hybrid.json,Add attribute-aware structured candidate search,retrieval,0.935,0.688948,5.06,0.792984,,keep-disabled
 optimized-final-v1,12dd28a,configs/final.json,Use dialog-state gains without structured-search regression,state+policy,0.955,0.722139,5.005,0.814042,,selected
+v2-parser-adapter-v1,working-tree,configs/final.json,Share production parsing with V2 tests and support V2 language forms,state+test-adapters,0.950,0.732849,4.995,0.814955,,keep-review-one-hit-tradeoff

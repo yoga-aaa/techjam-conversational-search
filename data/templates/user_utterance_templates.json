@@ -1,0 +1,258 @@
+{
+  "schema_version": 1,
+  "version": "1.0.0",
+  "language": "en",
+  "groups": {
+    "initial_buying": [
+      {
+        "template_id": "initial_buying_001",
+        "template": "I'm looking for {category}. One requirement is: {value}.",
+        "tags": ["neutral", "explicit"]
+      },
+      {
+        "template_id": "initial_buying_002",
+        "template": "I need help finding {category}; {value} is important.",
+        "tags": ["direct", "constraint"]
+      },
+      {
+        "template_id": "initial_buying_003",
+        "template": "Show me {category} that meet this requirement: {value}.",
+        "tags": ["imperative", "explicit"]
+      },
+      {
+        "template_id": "initial_buying_004",
+        "template": "I'm shopping for {category}, and I need {value}.",
+        "tags": ["casual", "constraint"]
+      },
+      {
+        "template_id": "initial_buying_005",
+        "template": "For {category}, this is non-negotiable: {value}.",
+        "tags": ["strong", "constraint"]
+      },
+      {
+        "template_id": "initial_buying_006",
+        "template": "Could you find {category} with the following: {value}?",
+        "tags": ["polite", "question"]
+      }
+    ],
+    "initial_browsing": [
+      {
+        "template_id": "initial_browsing_001",
+        "template": "I'm exploring options for {category}.",
+        "tags": ["neutral", "exploratory"]
+      },
+      {
+        "template_id": "initial_browsing_002",
+        "template": "Could you show me some {category}? I'm still deciding what I want.",
+        "tags": ["polite", "exploratory"]
+      },
+      {
+        "template_id": "initial_browsing_003",
+        "template": "I'd like to browse {category} and see what is available.",
+        "tags": ["neutral", "browsing"]
+      },
+      {
+        "template_id": "initial_browsing_004",
+        "template": "I'm not sure exactly what I need yet, but I'm interested in {category}.",
+        "tags": ["uncertain", "exploratory"]
+      },
+      {
+        "template_id": "initial_browsing_005",
+        "template": "Let's start with some ideas for {category}.",
+        "tags": ["casual", "exploratory"]
+      },
+      {
+        "template_id": "initial_browsing_006",
+        "template": "What kinds of {category} would you suggest?",
+        "tags": ["question", "open_ended"]
+      }
+    ],
+    "initial_override": [
+      {
+        "template_id": "initial_override_001",
+        "template": "I'm looking for {category}. My current preference is: {old_value}.",
+        "tags": ["neutral", "temporary_preference"]
+      },
+      {
+        "template_id": "initial_override_002",
+        "template": "I want to browse {category}; initially, keep this in mind: {old_value}.",
+        "tags": ["exploratory", "temporary_preference"]
+      },
+      {
+        "template_id": "initial_override_003",
+        "template": "For now, I'm considering {category} with this preference: {old_value}.",
+        "tags": ["qualified", "temporary_preference"]
+      },
+      {
+        "template_id": "initial_override_004",
+        "template": "Help me find {category}. At the moment, I prefer {old_value}.",
+        "tags": ["direct", "temporary_preference"]
+      },
+      {
+        "template_id": "initial_override_005",
+        "template": "I'm shopping for {category}, and my first thought is {old_value}.",
+        "tags": ["casual", "temporary_preference"]
+      }
+    ],
+    "attribute_reply": [
+      {
+        "template_id": "attribute_reply_001",
+        "template": "For {attribute_label}, what matters is: {values}.",
+        "tags": ["neutral", "explicit"]
+      },
+      {
+        "template_id": "attribute_reply_002",
+        "template": "My preference regarding {attribute_label} is {values}.",
+        "tags": ["formal", "explicit"]
+      },
+      {
+        "template_id": "attribute_reply_003",
+        "template": "I'd go with {values} for {attribute_label}.",
+        "tags": ["casual", "value_first"]
+      },
+      {
+        "template_id": "attribute_reply_004",
+        "template": "On {attribute_label}, I prefer {values}.",
+        "tags": ["concise", "explicit"]
+      },
+      {
+        "template_id": "attribute_reply_005",
+        "template": "Please prioritize this for {attribute_label}: {values}.",
+        "tags": ["polite", "explicit"]
+      },
+      {
+        "template_id": "attribute_reply_006",
+        "template": "Regarding {attribute_label}, {values} works best for me.",
+        "tags": ["neutral", "value_first"]
+      },
+      {
+        "template_id": "attribute_reply_007",
+        "template": "For that part, I'd prefer {values}.",
+        "tags": ["contextual", "implicit_attribute"]
+      },
+      {
+        "template_id": "attribute_reply_008",
+        "template": "The option I have in mind is {values}.",
+        "tags": ["contextual", "implicit_attribute"]
+      }
+    ],
+    "no_preference": [
+      {
+        "template_id": "no_preference_001",
+        "template": "I don't have an additional preference for {attribute_label}.",
+        "tags": ["neutral", "negative"]
+      },
+      {
+        "template_id": "no_preference_002",
+        "template": "Any {attribute_label} is fine with me.",
+        "tags": ["casual", "indifferent"]
+      },
+      {
+        "template_id": "no_preference_003",
+        "template": "The {attribute_label} doesn't really matter to me.",
+        "tags": ["casual", "negative"]
+      },
+      {
+        "template_id": "no_preference_004",
+        "template": "I'm flexible about {attribute_label}.",
+        "tags": ["concise", "indifferent"]
+      },
+      {
+        "template_id": "no_preference_005",
+        "template": "There is no particular {attribute_label} I need.",
+        "tags": ["formal", "negative"]
+      },
+      {
+        "template_id": "no_preference_006",
+        "template": "I have no strong opinion on {attribute_label}.",
+        "tags": ["neutral", "indifferent"]
+      }
+    ],
+    "boundary": [
+      {
+        "template_id": "boundary_001",
+        "template": "I don't have a preference for {attribute_label}; use your judgment.",
+        "tags": ["neutral", "delegation"]
+      },
+      {
+        "template_id": "boundary_002",
+        "template": "Any {attribute_label} works, so please decide for me.",
+        "tags": ["casual", "delegation"]
+      },
+      {
+        "template_id": "boundary_003",
+        "template": "The {attribute_label} is up to you.",
+        "tags": ["concise", "delegation"]
+      },
+      {
+        "template_id": "boundary_004",
+        "template": "I am completely flexible on {attribute_label}; choose what fits best.",
+        "tags": ["formal", "delegation"]
+      },
+      {
+        "template_id": "boundary_005",
+        "template": "No particular {attribute_label} stands out to me, so use your best judgment.",
+        "tags": ["neutral", "delegation"]
+      }
+    ],
+    "override": [
+      {
+        "template_id": "override_001",
+        "template": "Actually, replace my earlier preference with this: {new_value}.",
+        "tags": ["explicit", "override"]
+      },
+      {
+        "template_id": "override_002",
+        "template": "I changed my mind. Ignore {old_value}; what I need now is {new_value}.",
+        "tags": ["explicit", "old_and_new"]
+      },
+      {
+        "template_id": "override_003",
+        "template": "Please discard the previous choice and use {new_value} instead.",
+        "tags": ["polite", "override"]
+      },
+      {
+        "template_id": "override_004",
+        "template": "On second thought, {new_value} is the requirement that matters now.",
+        "tags": ["natural", "override"]
+      },
+      {
+        "template_id": "override_005",
+        "template": "Forget my earlier preference; prioritize {new_value} from now on.",
+        "tags": ["direct", "override"]
+      },
+      {
+        "template_id": "override_006",
+        "template": "I'd rather switch from {old_value} to {new_value}.",
+        "tags": ["concise", "old_and_new"]
+      }
+    ],
+    "fallback": [
+      {
+        "template_id": "fallback_001",
+        "template": "Those options are not quite right yet. Ask me about one specific attribute.",
+        "tags": ["neutral", "request_question"]
+      },
+      {
+        "template_id": "fallback_002",
+        "template": "Could you narrow things down by asking me about a particular feature?",
+        "tags": ["polite", "request_question"]
+      },
+      {
+        "template_id": "fallback_003",
+        "template": "I need a better match; ask me one focused question.",
+        "tags": ["direct", "request_question"]
+      },
+      {
+        "template_id": "fallback_004",
+        "template": "We're not there yet. Try asking about one concrete preference.",
+        "tags": ["casual", "request_question"]
+      },
+      {
+        "template_id": "fallback_005",
+        "template": "Please ask about a specific attribute so I can clarify what I want.",
+        "tags": ["formal", "request_question"]
+      }
+    ]
+  }
+}

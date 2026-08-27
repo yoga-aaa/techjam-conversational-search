@@ -25,9 +25,17 @@ class Agent:
         turn: int,
         top_k: int,
     ) -> dict:
-        return self._impl.respond(
-            session_id=session_id,
-            user_message=user_message,
-            turn=turn,
-            top_k=top_k,
-        )
+        try:
+            return self._impl.respond(
+                session_id=session_id,
+                user_message=user_message,
+                turn=turn,
+                top_k=top_k,
+            )
+        except Exception:
+            return {
+                "message": "I couldn't process that request; please try again.",
+                "ask_attribute": None,
+                "recommendations": [],
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0},
+            }

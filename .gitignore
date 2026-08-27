@@ -23,6 +23,8 @@ artifacts/
 build/
 dist/
 *.zip
+!packages/
+!packages/techjam-v2-two-tests-portable-*.zip
 *.npy
 *.npz
 *.faiss
