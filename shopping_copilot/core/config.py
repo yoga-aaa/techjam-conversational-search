@@ -36,6 +36,7 @@ class AppConfig:
     search: SearchConfig
     policy: PolicyConfig
     trace: TraceConfig
+    retrieval: dict[str, object]
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -52,6 +53,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     search = payload.get("search", {})
     policy = payload.get("policy", {})
     trace = payload.get("trace", {})
+    retrieval = payload.get("retrieval", {})
 
     result = AppConfig(
         state_implementation=str(payload.get("state", {}).get("implementation", "rule")),
@@ -77,6 +79,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
                 else PROJECT_ROOT / Path(trace.get("path", "artifacts/traces.jsonl"))
             ),
         ),
+        retrieval=dict(retrieval) if isinstance(retrieval, dict) else {},
     )
 
     if result.state_implementation != "rule":

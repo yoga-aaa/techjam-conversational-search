@@ -36,11 +36,11 @@ def build_components(catalog_path: str | Path, config: AppConfig) -> Components:
     lexical = BM25Retriever(store)
     dense = DisabledDenseRetriever()
     structured: Retriever = (
-        StructuredRetriever(store)
+        StructuredRetriever(store, config.retrieval)
         if config.search.structured_enabled
         else DisabledDenseRetriever()
     )
-    retriever = HybridRetriever(lexical=lexical, dense=dense, structured=structured)
+    retriever = HybridRetriever(lexical=lexical, dense=dense, structured=structured, config=config.retrieval)
     trace_sink: TraceSink = JsonlTraceSink(config.trace.path) if config.trace.enabled else NullTraceSink()
     return Components(
         state_tracker=RuleStateTracker(),

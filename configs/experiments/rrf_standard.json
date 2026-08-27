@@ -1,0 +1,32 @@
+{
+  "state": {"implementation": "rule"},
+  "search": {
+    "implementation": "hybrid",
+    "candidate_k": 100,
+    "probe_overload_threshold": 2000,
+    "dense_enabled": false,
+    "structured_enabled": true
+  },
+  "retrieval": {
+    "structured_rrf": {
+      "mode": "standard_rrf",
+      "k": 60,
+      "per_attribute_limit": 300,
+      "weights": {
+        "category": 1.0,
+        "material": 1.0,
+        "color": 1.0,
+        "size": 1.0,
+        "style": 1.0,
+        "brand": 1.0,
+        "feature": 1.0,
+        "use_case": 1.0,
+        "other": 1.0
+      }
+    },
+    "candidate_merge": {"mode": "ranked_union"}
+  },
+  "ranking": {"implementation": "heuristic"},
+  "policy": {"implementation": "heuristic", "broad_recommendation_count": 10, "uncertain_recommendation_count": 10, "confident_score_gap": 0.15},
+  "trace": {"enabled": false, "path": "artifacts/traces.jsonl"}
+}

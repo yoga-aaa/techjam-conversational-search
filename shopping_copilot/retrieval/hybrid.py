@@ -9,8 +9,9 @@ from shopping_copilot.core.interfaces import Retriever
 class HybridRetriever:
     """Combines candidate-search routes without changing the pipeline contract."""
 
-    def __init__(self, lexical: Retriever, dense: Retriever, structured: Retriever) -> None:
+    def __init__(self, lexical: Retriever, dense: Retriever, structured: Retriever, config: dict[str, object] | None = None) -> None:
         self.lexical = lexical
+        self.config = dict(config or {})
         self.dense = dense
         self.structured = structured
 

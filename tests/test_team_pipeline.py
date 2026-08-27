@@ -10,6 +10,7 @@ from shopping_copilot.core.config import load_config
 from shopping_copilot.core.factory import build_components
 from shopping_copilot.state.rule_state import RuleStateTracker
 from starter.agent import Agent
+from shopping_copilot.retrieval.structured import reciprocal_rank_fusion
 
 
 PROFILE = {
@@ -171,6 +172,17 @@ class TeamPipelineTest(unittest.TestCase):
             )
             self.assertEqual(result["hit_rate_at_10"], 1.0)
 
+    def test_standard_rrf_rewards_multi_attribute_candidate(self) -> None:
+        fused = reciprocal_rank_fusion(
+            {
+                "category": [("A", 1.0), ("B", 0.5)],
+                "material": [("B", 1.0)],
+                "color": [("B", 1.0)],
+            },
+            k=60,
+        )
+        self.assertGreater(fused["B"], fused["A"])
+        self.assertLessEqual(max(fused.values()), 1.0)
 
 if __name__ == "__main__":
     unittest.main()

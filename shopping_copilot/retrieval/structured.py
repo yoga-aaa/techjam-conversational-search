@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter, defaultdict
+from typing import Mapping, Sequence
 
 from shopping_copilot.catalog.store import CatalogStore
 from shopping_copilot.core.contracts import Candidate, RetrievalDiagnostics, RetrievalResult, SearchPlan
@@ -23,16 +24,52 @@ def _tokens(value: str) -> set[str]:
     }
 
 
+def reciprocal_rank_fusion(
+    ranked_by_attribute: Mapping[str, Sequence[tuple[str, float]]],
+    k: int = 60,
+    weights: Mapping[str, float] | None = None,
+) -> dict[str, float]:
+    """Fuse independent attribute rankings into normalized structured scores."""
+    smoothing = max(1, int(k))
+    configured_weights = weights or {}
+    fused: dict[str, float] = {}
+    max_possible = 0.0
+    for attribute, rows in ranked_by_attribute.items():
+        weight = max(0.0, float(configured_weights.get(attribute, 1.0)))
+        if weight <= 0.0 or not rows:
+            continue
+        max_possible += weight / float(smoothing + 1)
+        seen: set[str] = set()
+        rank = 0
+        for parent_asin, _raw_score in rows:
+            if parent_asin in seen:
+                continue
+            seen.add(parent_asin)
+            rank += 1
+            fused[parent_asin] = fused.get(parent_asin, 0.0) + weight / float(smoothing + rank)
+    if max_possible <= 0.0:
+        return {}
+    return {parent_asin: min(1.0, score / max_possible) for parent_asin, score in fused.items()}
+
+
 class StructuredRetriever:
     """Attribute-aware candidate search derived entirely from the frozen catalog."""
 
-    def __init__(self, store: CatalogStore) -> None:
+    def __init__(self, store: CatalogStore, config: Mapping[str, object] | None = None) -> None:
         self.store = store
         self.general_postings: dict[str, set[str]] = defaultdict(set)
         self.category_postings: dict[str, set[str]] = defaultdict(set)
         self.brand_postings: dict[str, set[str]] = defaultdict(set)
         self._cached_key: tuple[object, ...] | None = None
         self._cached_scores: dict[str, float] = {}
+        rrf_config = dict((config or {}).get("structured_rrf") or {})
+        self.fusion_mode = str(rrf_config.get("mode", "max")).lower()
+        self.rrf_k = max(1, int(rrf_config.get("k", 60)))
+        self.per_attribute_limit = max(1, int(rrf_config.get("per_attribute_limit", 300)))
+        self.rrf_weights = {
+            str(name): float(value)
+            for name, value in dict(rrf_config.get("weights") or {}).items()
+        }
         self._build_indexes()
 
     def _build_indexes(self) -> None:
@@ -89,14 +126,7 @@ class StructuredRetriever:
             self._cached_scores = {}
             return {}
 
-        attribute_scores: dict[str, dict[str, float]] = {}
-        for attribute, values in constraints.items():
-            combined: dict[str, float] = {}
-            for value in values:
-                for parent_asin, score in self._value_scores(attribute, value).items():
-                    combined[parent_asin] = max(combined.get(parent_asin, 0.0), score)
-            attribute_scores[attribute] = combined
-
+        attribute_scores = self._attribute_scores(constraints)
         candidate_ids: set[str] = set()
         for attribute in non_category:
             candidate_ids.update(attribute_scores.get(attribute, {}))
@@ -105,33 +135,73 @@ class StructuredRetriever:
         if narrowed_ids:
             candidate_ids = narrowed_ids
 
+        denominator = float(len(constraints))
+        scores = {
+            parent_asin: sum(values.get(parent_asin, 0.0) for values in attribute_scores.values()) / denominator
+            for parent_asin in candidate_ids
+        }
+        scores = {parent_asin: score for parent_asin, score in scores.items() if score > 0.0}
+        self._cached_key = cache_key
+        self._cached_scores = self._filter_scores(plan, scores)
+        return self._cached_scores
+
+    def _attribute_scores(
+        self,
+        constraints: Mapping[str, Sequence[str]],
+    ) -> dict[str, dict[str, float]]:
+        attribute_scores: dict[str, dict[str, float]] = {}
+        for attribute, values in constraints.items():
+            combined: dict[str, float] = {}
+            for value in values:
+                for parent_asin, score in self._value_scores(attribute, value).items():
+                    combined[parent_asin] = max(combined.get(parent_asin, 0.0), score)
+            attribute_scores[attribute] = combined
+        return attribute_scores
+
+    def _filter_scores(self, plan: SearchPlan, scores: Mapping[str, float]) -> dict[str, float]:
         price_max = plan.hard_filters.get("price_max")
         excluded = tuple(term.lower() for term in plan.excluded_terms)
-        scores: dict[str, float] = {}
-        denominator = float(len(constraints))
-        for parent_asin in candidate_ids:
+        filtered: dict[str, float] = {}
+        for parent_asin, score in scores.items():
             product = self.store.get(parent_asin)
             if product is None:
                 continue
             if price_max is not None and product.price is not None and product.price > float(price_max):
                 continue
-            searchable = product.searchable_text.lower()
-            if excluded and any(term in searchable for term in excluded):
+            if excluded and any(term in product.searchable_text.lower() for term in excluded):
                 continue
-            score = sum(values.get(parent_asin, 0.0) for values in attribute_scores.values()) / denominator
-            if score > 0.0:
-                scores[parent_asin] = score
-        self._cached_key = cache_key
-        self._cached_scores = scores
-        return scores
+            filtered[parent_asin] = score
+        return filtered
+
+    def _rrf_scores(self, plan: SearchPlan) -> dict[str, float]:
+        constraints = {
+            attribute: values
+            for attribute, values in plan.structured_constraints.items()
+            if values
+        }
+        attribute_scores = self._attribute_scores(constraints)
+        ranked_by_attribute = {
+            attribute: sorted(scores.items(), key=lambda item: (-item[1], item[0]))[: self.per_attribute_limit]
+            for attribute, scores in attribute_scores.items()
+            if scores
+        }
+        fused = reciprocal_rank_fusion(ranked_by_attribute, self.rrf_k, self.rrf_weights)
+        return self._filter_scores(plan, fused)
+
+    def _active_scores(self, plan: SearchPlan) -> dict[str, float]:
+        if self.fusion_mode in {"rrf", "standard_rrf"}:
+            return self._rrf_scores(plan)
+        if self.fusion_mode == "max":
+            return self._scores(plan)
+        raise ValueError(f"Unsupported structured fusion mode: {self.fusion_mode}")
 
     def probe(self, plan: SearchPlan) -> RetrievalDiagnostics:
-        scores = sorted(self._scores(plan).values(), reverse=True)
+        scores = sorted(self._active_scores(plan).values(), reverse=True)
         score_gap = scores[0] - scores[1] if len(scores) > 1 else (scores[0] if scores else 0.0)
         return RetrievalDiagnostics(len(scores), 0, max(0.0, score_gap), plan.route)
 
     def retrieve(self, plan: SearchPlan) -> RetrievalResult:
-        scores = self._scores(plan)
+        scores = self._active_scores(plan)
         ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))[: plan.candidate_k]
         candidates = tuple(
             Candidate(
