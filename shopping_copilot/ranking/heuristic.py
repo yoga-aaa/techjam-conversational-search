@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Mapping
+
 from shopping_copilot.catalog.store import CatalogStore
 from shopping_copilot.core.contracts import RankedCandidate, RetrievalResult, SearchPlan, SessionState
 
@@ -7,8 +9,13 @@ from shopping_copilot.core.contracts import RankedCandidate, RetrievalResult, Se
 class HeuristicRanker:
     """Deterministic offline reranker over the candidate set."""
 
-    def __init__(self, store: CatalogStore) -> None:
+    def __init__(self, store: CatalogStore, config: Mapping[str, object] | None = None) -> None:
         self.store = store
+        ranking_config = dict(config or {})
+        self.constraint_weight_scale = max(
+            0.0,
+            float(ranking_config.get("constraint_weight_scale", 1.0)),
+        )
 
     def rank(
         self,
@@ -50,7 +57,7 @@ class HeuristicRanker:
             final_score = (
                 plan.bm25_weight * lexical_score
                 + plan.dense_weight * dense_score
-                + plan.constraint_weight * constraint_score
+                + plan.constraint_weight * self.constraint_weight_scale * constraint_score
                 + plan.profile_weight * profile_score
             )
             ranked.append(

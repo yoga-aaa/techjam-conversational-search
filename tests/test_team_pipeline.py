@@ -69,6 +69,10 @@ class TeamPipelineTest(unittest.TestCase):
             self.assertIn(response["ask_attribute"], {None, "material", "budget", "size", "color", "style", "use_case", "feature", "other"})
             self.assertEqual(response["usage"], {"prompt_tokens": 0, "completion_tokens": 0})
 
+    def test_rerank_constraint_scale_is_configurable(self) -> None:
+        config = load_config("configs/experiments/rerank_constraint_scale_3.json")
+        self.assertEqual(config.ranking["constraint_weight_scale"], 3.0)
+
     def test_state_accumulates_and_override_erases_old_preference(self) -> None:
         tracker = RuleStateTracker()
         tracker.reset("s2", PROFILE)
