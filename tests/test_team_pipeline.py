@@ -10,7 +10,8 @@ from shopping_copilot.core.config import load_config
 from shopping_copilot.core.factory import build_components
 from shopping_copilot.state.rule_state import RuleStateTracker
 from starter.agent import Agent
-from shopping_copilot.retrieval.structured import reciprocal_rank_fusion
+from shopping_copilot.retrieval.hybrid import protected_candidate_ids
+from shopping_copilot.retrieval.structured import grouped_rrf_signals, reciprocal_rank_fusion
 
 
 PROFILE = {
@@ -184,5 +185,31 @@ class TeamPipelineTest(unittest.TestCase):
         self.assertGreater(fused["B"], fused["A"])
         self.assertLessEqual(max(fused.values()), 1.0)
 
+    def test_optimized_rrf_discounts_correlated_attribute_contributions(self) -> None:
+        signals = grouped_rrf_signals(
+            {
+                "feature": [("A", 1.0)],
+                "use_case": [("A", 1.0)],
+                "material": [("B", 1.0)],
+            },
+            k=60,
+            weights={},
+            attribute_groups={"intent": ["feature", "use_case"], "physical": ["material"]},
+            secondary_discount=0.5,
+        )
+        self.assertGreater(signals["A"].attribute_coverage, signals["B"].attribute_coverage)
+        self.assertLessEqual(signals["A"].rank_quality, 1.0)
+
+    def test_protected_union_keeps_both_recall_routes(self) -> None:
+        selected = protected_candidate_ids(
+            ["lexical-1", "shared"],
+            ["structured-1", "shared"],
+            ["structured-1", "lexical-1", "shared"],
+            limit=3,
+            protected_fraction=0.5,
+        )
+        self.assertIn("lexical-1", selected)
+        self.assertIn("structured-1", selected)
+        self.assertEqual(len(selected), len(set(selected)))
 if __name__ == "__main__":
     unittest.main()

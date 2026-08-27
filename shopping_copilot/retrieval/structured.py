@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from typing import Mapping, Sequence
 
 from shopping_copilot.catalog.store import CatalogStore
@@ -22,6 +23,13 @@ def _tokens(value: str) -> set[str]:
         for token in TOKEN_RE.findall(value)
         if len(token) > 1 and token.lower() not in STOPWORDS
     }
+
+
+@dataclass(frozen=True)
+class StructuredFusionSignals:
+    rank_quality: float
+    attribute_coverage: float
+    matched_rank_attributes: tuple[str, ...] = ()
 
 
 def reciprocal_rank_fusion(
@@ -52,6 +60,73 @@ def reciprocal_rank_fusion(
     return {parent_asin: min(1.0, score / max_possible) for parent_asin, score in fused.items()}
 
 
+def _attribute_to_group(attribute_groups: Mapping[str, Sequence[str]]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for group, attributes in attribute_groups.items():
+        for attribute in attributes:
+            if attribute in result:
+                raise ValueError(f"Attribute {attribute!r} belongs to multiple RRF groups")
+            result[str(attribute)] = str(group)
+    return result
+
+
+def grouped_rrf_signals(
+    ranked_by_attribute: Mapping[str, Sequence[tuple[str, float]]],
+    k: int,
+    weights: Mapping[str, float],
+    attribute_groups: Mapping[str, Sequence[str]],
+    secondary_discount: float,
+) -> dict[str, StructuredFusionSignals]:
+    """Apply group saturation to RRF while exposing independent coverage."""
+    smoothing = max(1, int(k))
+    discount = max(0.0, min(1.0, float(secondary_discount)))
+    attribute_to_group = _attribute_to_group(attribute_groups)
+    active_weights: dict[str, float] = {}
+    contributions: dict[str, dict[str, float]] = {}
+
+    for attribute, rows in ranked_by_attribute.items():
+        weight = max(0.0, float(weights.get(attribute, 1.0)))
+        if weight <= 0.0 or not rows:
+            continue
+        active_weights[attribute] = weight
+        seen: set[str] = set()
+        rank = 0
+        for parent_asin, _raw_score in rows:
+            if parent_asin in seen:
+                continue
+            seen.add(parent_asin)
+            rank += 1
+            contributions.setdefault(parent_asin, {})[attribute] = weight / float(smoothing + rank)
+
+    if not active_weights:
+        return {}
+
+    group_maxima: dict[str, list[float]] = {}
+    for attribute, weight in active_weights.items():
+        group = attribute_to_group.get(attribute, attribute)
+        group_maxima.setdefault(group, []).append(weight / float(smoothing + 1))
+    max_possible = sum(
+        max(values) + discount * (sum(values) - max(values))
+        for values in group_maxima.values()
+    )
+    total_weight = sum(active_weights.values())
+    result: dict[str, StructuredFusionSignals] = {}
+    for parent_asin, per_attribute in contributions.items():
+        per_group: dict[str, list[float]] = {}
+        for attribute, value in per_attribute.items():
+            per_group.setdefault(attribute_to_group.get(attribute, attribute), []).append(value)
+        grouped_score = sum(
+            max(values) + discount * (sum(values) - max(values))
+            for values in per_group.values()
+        )
+        result[parent_asin] = StructuredFusionSignals(
+            rank_quality=min(1.0, grouped_score / max_possible) if max_possible else 0.0,
+            attribute_coverage=min(1.0, sum(active_weights[a] for a in per_attribute) / total_weight),
+            matched_rank_attributes=tuple(sorted(per_attribute)),
+        )
+    return result
+
+
 class StructuredRetriever:
     """Attribute-aware candidate search derived entirely from the frozen catalog."""
 
@@ -70,6 +145,23 @@ class StructuredRetriever:
             str(name): float(value)
             for name, value in dict(rrf_config.get("weights") or {}).items()
         }
+        self.attribute_groups = dict(rrf_config.get("attribute_groups") or {
+            "taxonomy": ["category"],
+            "appearance": ["color", "style"],
+            "physical": ["material", "size"],
+            "intent": ["feature", "use_case", "other"],
+            "commercial": ["brand", "budget"],
+        })
+        _attribute_to_group(self.attribute_groups)
+        self.secondary_discount = max(0.0, min(1.0, float(rrf_config.get("group_secondary_discount", 0.5))))
+        signal_mix = dict(rrf_config.get("signal_mix") or {"rank_quality": 0.5, "attribute_coverage": 0.5})
+        rank_mix = max(0.0, float(signal_mix.get("rank_quality", 0.0)))
+        coverage_mix = max(0.0, float(signal_mix.get("attribute_coverage", 0.0)))
+        if rank_mix + coverage_mix <= 0.0:
+            self.rank_mix, self.coverage_mix = 1.0, 0.0
+        else:
+            self.rank_mix = rank_mix / (rank_mix + coverage_mix)
+            self.coverage_mix = coverage_mix / (rank_mix + coverage_mix)
         self._build_indexes()
 
     def _build_indexes(self) -> None:
@@ -110,22 +202,12 @@ class StructuredRetriever:
         )
         if cache_key == self._cached_key:
             return self._cached_scores
-
-        constraints = {
-            attribute: values
-            for attribute, values in plan.structured_constraints.items()
-            if values
-        }
-        non_category = {
-            attribute: values
-            for attribute, values in constraints.items()
-            if attribute != "category"
-        }
+        constraints = {attribute: values for attribute, values in plan.structured_constraints.items() if values}
+        non_category = {attribute: values for attribute, values in constraints.items() if attribute != "category"}
         if not non_category:
             self._cached_key = cache_key
             self._cached_scores = {}
             return {}
-
         attribute_scores = self._attribute_scores(constraints)
         candidate_ids: set[str] = set()
         for attribute in non_category:
@@ -134,29 +216,24 @@ class StructuredRetriever:
         narrowed_ids = candidate_ids & category_ids
         if narrowed_ids:
             candidate_ids = narrowed_ids
-
         denominator = float(len(constraints))
         scores = {
             parent_asin: sum(values.get(parent_asin, 0.0) for values in attribute_scores.values()) / denominator
             for parent_asin in candidate_ids
         }
-        scores = {parent_asin: score for parent_asin, score in scores.items() if score > 0.0}
         self._cached_key = cache_key
-        self._cached_scores = self._filter_scores(plan, scores)
+        self._cached_scores = self._filter_scores(plan, {item: score for item, score in scores.items() if score > 0.0})
         return self._cached_scores
 
-    def _attribute_scores(
-        self,
-        constraints: Mapping[str, Sequence[str]],
-    ) -> dict[str, dict[str, float]]:
-        attribute_scores: dict[str, dict[str, float]] = {}
+    def _attribute_scores(self, constraints: Mapping[str, Sequence[str]]) -> dict[str, dict[str, float]]:
+        result: dict[str, dict[str, float]] = {}
         for attribute, values in constraints.items():
             combined: dict[str, float] = {}
             for value in values:
                 for parent_asin, score in self._value_scores(attribute, value).items():
                     combined[parent_asin] = max(combined.get(parent_asin, 0.0), score)
-            attribute_scores[attribute] = combined
-        return attribute_scores
+            result[attribute] = combined
+        return result
 
     def _filter_scores(self, plan: SearchPlan, scores: Mapping[str, float]) -> dict[str, float]:
         price_max = plan.hard_filters.get("price_max")
@@ -173,24 +250,46 @@ class StructuredRetriever:
             filtered[parent_asin] = score
         return filtered
 
-    def _rrf_scores(self, plan: SearchPlan) -> dict[str, float]:
-        constraints = {
-            attribute: values
-            for attribute, values in plan.structured_constraints.items()
-            if values
-        }
-        attribute_scores = self._attribute_scores(constraints)
-        ranked_by_attribute = {
+    def _rankings(self, plan: SearchPlan) -> dict[str, list[tuple[str, float]]]:
+        constraints = {attribute: values for attribute, values in plan.structured_constraints.items() if values}
+        return {
             attribute: sorted(scores.items(), key=lambda item: (-item[1], item[0]))[: self.per_attribute_limit]
-            for attribute, scores in attribute_scores.items()
+            for attribute, scores in self._attribute_scores(constraints).items()
             if scores
         }
-        fused = reciprocal_rank_fusion(ranked_by_attribute, self.rrf_k, self.rrf_weights)
-        return self._filter_scores(plan, fused)
+
+    def _rrf_scores(self, plan: SearchPlan) -> dict[str, float]:
+        return self._filter_scores(plan, reciprocal_rank_fusion(self._rankings(plan), self.rrf_k, self.rrf_weights))
+
+    def _optimized_rrf_scores(self, plan: SearchPlan) -> dict[str, float]:
+        rankings = self._rankings(plan)
+        signals = grouped_rrf_signals(
+            rankings,
+            self.rrf_k,
+            self.rrf_weights,
+            self.attribute_groups,
+            self.secondary_discount,
+        )
+        active_attributes = [
+            attribute
+            for attribute, rows in rankings.items()
+            if rows and max(0.0, float(self.rrf_weights.get(attribute, 1.0))) > 0.0
+        ]
+        scores = {
+            parent_asin: (
+                signal.rank_quality
+                if len(active_attributes) <= 1
+                else self.rank_mix * signal.rank_quality + self.coverage_mix * signal.attribute_coverage
+            )
+            for parent_asin, signal in signals.items()
+        }
+        return self._filter_scores(plan, scores)
 
     def _active_scores(self, plan: SearchPlan) -> dict[str, float]:
         if self.fusion_mode in {"rrf", "standard_rrf"}:
             return self._rrf_scores(plan)
+        if self.fusion_mode == "optimized_rrf":
+            return self._optimized_rrf_scores(plan)
         if self.fusion_mode == "max":
             return self._scores(plan)
         raise ValueError(f"Unsupported structured fusion mode: {self.fusion_mode}")
@@ -204,11 +303,7 @@ class StructuredRetriever:
         scores = self._active_scores(plan)
         ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))[: plan.candidate_k]
         candidates = tuple(
-            Candidate(
-                parent_asin=parent_asin,
-                constraint_score=score,
-                source_routes=("structured",),
-            )
+            Candidate(parent_asin=parent_asin, constraint_score=score, source_routes=("structured",))
             for parent_asin, score in ranked
         )
         diagnostics = RetrievalDiagnostics(
