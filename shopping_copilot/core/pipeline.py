@@ -54,6 +54,7 @@ class ShoppingCopilotAgent:
 
         result = self.components.retriever.retrieve(search_plan)
         ranked = self.components.ranker.rank(state, search_plan, result)
+        self.components.coverage_manager.observe(state, ranked)
         decision = self.components.policy.after_ranking(
             state,
             search_plan,
@@ -75,6 +76,9 @@ class ShoppingCopilotAgent:
             response_plan = replace(search_plan, candidate_k=response_candidate_count)
             response_ranked = self.components.ranker.rank(state, response_plan, response_result)
 
+        if state.coverage_mode:
+            response_ranked = self.components.coverage_manager.order_for_response(state, ranked)
+
         self.components.state_tracker.mark_asked(session_id, decision.ask_attribute)
         latency_ms = round((perf_counter() - started) * 1000.0, 3)
         self.components.trace_sink.record({
@@ -89,12 +93,18 @@ class ShoppingCopilotAgent:
             "returned_candidate_count": len(result.candidates),
             "ask_attribute": decision.ask_attribute,
             "question_scores": dict(state.question_scores),
+            "candidate_overlap": round(state.candidate_overlap, 6),
+            "stagnant_candidate_turns": state.stagnant_candidate_turns,
+            "coverage_mode": state.coverage_mode,
+            "shown_candidate_count": len(state.shown_asins),
             "recommendation_count": decision.recommendation_count,
             "latency_ms": latency_ms,
         })
-        return self.components.response_builder.build(
+        response = self.components.response_builder.build(
             ranked=response_ranked,
             decision=decision,
             top_k=top_k,
             usage=ModelUsage(),
         )
+        self.components.coverage_manager.record_response(state, response["recommendations"])
+        return response
