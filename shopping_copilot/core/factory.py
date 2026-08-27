@@ -46,7 +46,7 @@ def build_components(catalog_path: str | Path, config: AppConfig) -> Components:
         state_tracker=RuleStateTracker(),
         planner=RuleQueryPlanner(config.search),
         retriever=retriever,
-        ranker=HeuristicRanker(store),
+        ranker=HeuristicRanker(store, config.ranking),
         policy=HeuristicPolicy(config.search, config.policy, store),
         response_builder=OfficialResponseBuilder(store),
         trace_sink=trace_sink,

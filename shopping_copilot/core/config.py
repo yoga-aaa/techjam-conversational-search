@@ -38,6 +38,7 @@ class TraceConfig:
 class AppConfig:
     state_implementation: str
     ranking_implementation: str
+    ranking: dict[str, object]
     search: SearchConfig
     policy: PolicyConfig
     trace: TraceConfig
@@ -61,6 +62,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     result = AppConfig(
         state_implementation=str(payload.get("state", {}).get("implementation", "rule")),
         ranking_implementation=str(payload.get("ranking", {}).get("implementation", "heuristic")),
+        ranking=dict(payload.get("ranking", {})),
         search=SearchConfig(
             implementation=str(search.get("implementation", "hybrid")),
             candidate_k=max(10, int(search.get("candidate_k", 100))),
