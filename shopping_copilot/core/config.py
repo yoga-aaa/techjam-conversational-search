@@ -21,6 +21,11 @@ class PolicyConfig:
     broad_recommendation_count: int
     uncertain_recommendation_count: int
     confident_score_gap: float
+    question_strategy: str
+    question_candidate_limit: int
+    question_min_coverage: float
+    question_min_score: float
+    question_attribute_priors: dict[str, float]
 
 
 @dataclass(frozen=True)
@@ -68,6 +73,14 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             broad_recommendation_count=max(0, int(policy.get("broad_recommendation_count", 3))),
             uncertain_recommendation_count=max(0, int(policy.get("uncertain_recommendation_count", 5))),
             confident_score_gap=max(0.0, float(policy.get("confident_score_gap", 0.15))),
+            question_strategy=str(policy.get("question_strategy", "fixed")),
+            question_candidate_limit=max(10, int(policy.get("question_candidate_limit", 60))),
+            question_min_coverage=max(0.0, min(1.0, float(policy.get("question_min_coverage", 0.12)))),
+            question_min_score=max(0.0, float(policy.get("question_min_score", 0.01))),
+            question_attribute_priors={
+                str(name): max(0.0, float(value))
+                for name, value in (policy.get("question_attribute_priors") or {}).items()
+            },
         ),
         trace=TraceConfig(
             enabled=bool(trace.get("enabled", False)),
@@ -87,5 +100,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         raise ValueError(f"Unsupported search implementation: {result.search.implementation}")
     if result.policy.implementation != "heuristic":
         raise ValueError(f"Unsupported policy implementation: {result.policy.implementation}")
+    if result.policy.question_strategy not in {"fixed", "information_gain"}:
+        raise ValueError(f"Unsupported question strategy: {result.policy.question_strategy}")
 
     return result

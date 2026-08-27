@@ -35,8 +35,8 @@ python scripts/run_evaluation.py --config configs/baseline.json --output results
 ```
 
 The current selected development configuration is `configs/final.json`. On the
-200-session public set it produced Hit Rate@10 `0.955`, MRR `0.722139`, MTTC
-`5.005`, and recommended technical score `0.814042`. These are public-set
+200-session public set it produced Hit Rate@10 `0.955`, MRR `0.714972`, MTTC
+`4.78`, and recommended technical score `0.816392`. These are public-set
 development results, not evidence of private-set performance. Controlled runs
 and rejected alternatives are recorded in `experiments/registry.csv`.
 

@@ -56,6 +56,7 @@ class Policy(Protocol):
         plan: SearchPlan,
         ranked: Sequence[RankedCandidate],
         diagnostics: RetrievalDiagnostics,
+        early_decision: PolicyDecision | None = None,
     ) -> PolicyDecision: ...
 
 

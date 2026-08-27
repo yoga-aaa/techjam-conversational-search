@@ -68,6 +68,7 @@ class RuleStateTracker:
         if is_override:
             context_attribute = None
             state.excluded_terms.clear()
+            state.question_scores = {}
             for name, values in list(state.active_slots.items()):
                 if name == "category":
                     continue
