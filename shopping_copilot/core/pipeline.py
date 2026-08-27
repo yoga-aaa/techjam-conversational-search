@@ -38,19 +38,42 @@ class ShoppingCopilotAgent:
         early_decision = self.components.policy.before_search(state, plan, probe)
 
         if early_decision is not None:
+            question_candidate_k = (
+                self.config.policy.question_candidate_limit
+                if self.config.policy.question_strategy == "information_gain"
+                else 10
+            )
             search_plan = replace(
                 plan,
-                candidate_k=max(10, early_decision.recommendation_count),
+                candidate_k=max(question_candidate_k, early_decision.recommendation_count),
                 use_dense=False,
                 use_structured=False,
             )
-            result = self.components.retriever.retrieve(search_plan)
-            ranked = self.components.ranker.rank(state, search_plan, result)
-            decision = early_decision
         else:
-            result = self.components.retriever.retrieve(plan)
-            ranked = self.components.ranker.rank(state, plan, result)
-            decision = self.components.policy.after_ranking(state, plan, ranked, result.diagnostics)
+            search_plan = plan
+
+        result = self.components.retriever.retrieve(search_plan)
+        ranked = self.components.ranker.rank(state, search_plan, result)
+        decision = self.components.policy.after_ranking(
+            state,
+            search_plan,
+            ranked,
+            result.diagnostics,
+            early_decision=early_decision,
+        )
+
+        response_ranked = ranked
+        if (
+            early_decision is not None
+            and self.config.policy.question_strategy == "information_gain"
+        ):
+            response_candidate_count = max(10, decision.recommendation_count)
+            response_result = replace(
+                result,
+                candidates=result.candidates[:response_candidate_count],
+            )
+            response_plan = replace(search_plan, candidate_k=response_candidate_count)
+            response_ranked = self.components.ranker.rank(state, response_plan, response_result)
 
         self.components.state_tracker.mark_asked(session_id, decision.ask_attribute)
         latency_ms = round((perf_counter() - started) * 1000.0, 3)
@@ -65,11 +88,12 @@ class ShoppingCopilotAgent:
             "candidate_count": result.diagnostics.candidate_count,
             "returned_candidate_count": len(result.candidates),
             "ask_attribute": decision.ask_attribute,
+            "question_scores": dict(state.question_scores),
             "recommendation_count": decision.recommendation_count,
             "latency_ms": latency_ms,
         })
         return self.components.response_builder.build(
-            ranked=ranked,
+            ranked=response_ranked,
             decision=decision,
             top_k=top_k,
             usage=ModelUsage(),

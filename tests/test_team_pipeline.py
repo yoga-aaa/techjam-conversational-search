@@ -7,7 +7,9 @@ from pathlib import Path
 
 from evaluator.local_evaluator import catalog_index, evaluate
 from shopping_copilot.core.config import load_config
+from shopping_copilot.core.contracts import RankedCandidate, SessionState
 from shopping_copilot.core.factory import build_components
+from shopping_copilot.policy.information_gain import InformationGainQuestionScorer
 from shopping_copilot.state.rule_state import RuleStateTracker
 from starter.agent import Agent
 
@@ -143,6 +145,73 @@ class TeamPipelineTest(unittest.TestCase):
             agent.reset("s3", PROFILE)
             response = agent.respond("s3", "I'm looking for shoes, but I'm still exploring.", 1, 10)
             self.assertEqual(response["ask_attribute"], "use_case")
+
+    def test_information_gain_prefers_attribute_that_splits_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            products = [
+                {
+                    "parent_asin": "A",
+                    "title": "Black cotton walking shoe",
+                    "features": ["comfortable"],
+                    "details": {"material": "cotton"},
+                    "description": ["walking shoe"],
+                    "categories": ["Clothing", "Shoes"],
+                    "store": "Example",
+                    "price": 50,
+                },
+                {
+                    "parent_asin": "B",
+                    "title": "Black leather walking shoe",
+                    "features": ["comfortable"],
+                    "details": {"material": "leather"},
+                    "description": ["walking shoe"],
+                    "categories": ["Clothing", "Shoes"],
+                    "store": "Example",
+                    "price": 50,
+                },
+                {
+                    "parent_asin": "C",
+                    "title": "Black wool walking shoe",
+                    "features": ["comfortable"],
+                    "details": {"material": "wool"},
+                    "description": ["walking shoe"],
+                    "categories": ["Clothing", "Shoes"],
+                    "store": "Example",
+                    "price": 50,
+                },
+            ]
+            catalog = root / "catalog.jsonl"
+            catalog.write_text("".join(json.dumps(item) + "\n" for item in products), encoding="utf-8")
+            config = load_config("configs/experiments/information_gain_policy.json")
+            components = build_components(catalog, config)
+            scorer = InformationGainQuestionScorer(
+                components.ranker.store,
+                candidate_limit=60,
+                minimum_coverage=0.12,
+                minimum_score=0.01,
+            )
+            ranked = [
+                RankedCandidate(item, 1.0, {})
+                for item in ("A", "B", "C")
+            ]
+
+            selected = scorer.choose(SessionState("information-gain"), ranked)
+
+            self.assertEqual(selected, "material")
+
+    def test_information_gain_policy_is_used_after_candidate_search(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalog = self._catalog(root)
+            agent = Agent(catalog, config_path="configs/experiments/information_gain_policy.json")
+            agent.reset("ig", PROFILE)
+
+            response = agent.respond("ig", "I'm looking for clothing, but I'm still exploring.", 1, 10)
+
+            self.assertIn(response["ask_attribute"], {
+                "material", "feature", "color", "size", "style", "use_case", "budget", "brand", "other"
+            })
 
     def test_last_turn_does_not_ask(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

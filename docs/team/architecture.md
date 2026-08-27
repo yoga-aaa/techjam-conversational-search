@@ -41,6 +41,8 @@ can affect every owner.
 - `retrieval/structured.py`: optional attribute-aware route, disabled in the selected final config after a public-set regression;
 - `ranking/heuristic.py`: offline scoring over the candidate set;
 - `policy/heuristic.py`: over-generality gate, question selection, and dynamic result count;
+- `policy/information_gain.py`: candidate-driven question scoring from attribute
+  coverage, entropy, expected reduction, and answerability priors;
 - `response/builder.py`: strict official output validation;
 - `observability/trace.py`: ground-truth-free internal turn traces.
 

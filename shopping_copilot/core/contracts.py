@@ -36,6 +36,7 @@ class SessionState:
     pending_attribute: str | None = None
     messages: list[str] = field(default_factory=list)
     active_context: list[str] = field(default_factory=list)
+    question_scores: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
