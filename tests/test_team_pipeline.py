@@ -7,7 +7,13 @@ from pathlib import Path
 
 from evaluator.local_evaluator import catalog_index, evaluate
 from shopping_copilot.core.config import load_config
-from shopping_copilot.core.contracts import RankedCandidate, SessionState
+from shopping_copilot.core.contracts import (
+    Candidate,
+    RankedCandidate,
+    RetrievalDiagnostics,
+    RetrievalResult,
+    SessionState,
+)
 from shopping_copilot.core.factory import build_components
 from shopping_copilot.policy.information_gain import InformationGainQuestionScorer
 from shopping_copilot.state.rule_state import RuleStateTracker
@@ -220,6 +226,98 @@ class TeamPipelineTest(unittest.TestCase):
             agent.reset("s4", PROFILE)
             response = agent.respond("s4", "I'm looking for shoes, but I'm still exploring.", 10, 10)
             self.assertIsNone(response["ask_attribute"])
+
+    def test_stagnant_candidate_pool_rotates_to_unseen_products(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            products = [
+                {
+                    "parent_asin": f"P{index:02d}",
+                    "title": f"Cotton casual shirt model {index:02d}",
+                    "features": ["cotton", "comfortable"],
+                    "details": {"department": "mens"},
+                    "description": ["casual summer shirt"],
+                    "categories": ["Clothing", "Shirts"],
+                    "store": "Example",
+                    "price": 29.0,
+                }
+                for index in range(25)
+            ]
+            catalog = root / "catalog.jsonl"
+            catalog.write_text(
+                "".join(json.dumps(item) + "\n" for item in products),
+                encoding="utf-8",
+            )
+            agent = Agent(catalog, config_path="configs/experiments/stagnation_coverage.json")
+            agent.reset("coverage", PROFILE)
+
+            first = agent.respond(
+                "coverage",
+                "I'm looking for shirts, but I'm still exploring.",
+                1,
+                10,
+            )
+            response = first
+            for turn in range(2, 5):
+                response = agent.respond(
+                    "coverage",
+                    f"I don't have an additional preference for {response['ask_attribute']}.",
+                    turn,
+                    10,
+                )
+
+            first_ids = {item["parent_asin"] for item in first["recommendations"]}
+            rotated_ids = {item["parent_asin"] for item in response["recommendations"]}
+            self.assertEqual(len(first_ids), 10)
+            self.assertEqual(len(rotated_ids), 10)
+            self.assertTrue(first_ids.isdisjoint(rotated_ids))
+
+    def test_override_clears_candidate_coverage_history(self) -> None:
+        tracker = RuleStateTracker()
+        state = tracker.reset("override-coverage", PROFILE)
+        state.shown_asins.update({"A", "B"})
+        state.previous_candidate_ids = ("A", "B")
+        state.previous_slot_signature = (("category", ("shoes",)),)
+        state.stagnant_candidate_turns = 2
+        state.coverage_mode = True
+
+        state = tracker.update(
+            "override-coverage",
+            "Actually, ignore my earlier preference. What I need is cotton.",
+            3,
+        )
+
+        self.assertEqual(state.shown_asins, set())
+        self.assertEqual(state.previous_candidate_ids, ())
+        self.assertFalse(state.coverage_mode)
+
+    def test_dynamic_ranking_boosts_accumulated_constraints(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = self._catalog(Path(directory))
+            config = load_config("configs/experiments/stagnation_coverage.json")
+            components = build_components(catalog, config)
+            state = components.state_tracker.reset("dynamic-rank", PROFILE)
+            state = components.state_tracker.update(
+                "dynamic-rank",
+                "I'm looking for shoes. A key requirement is: waterproof.",
+                1,
+            )
+            plan = components.planner.build(state)
+            result = RetrievalResult(
+                candidates=(
+                    Candidate("A", lexical_score=1.0),
+                    Candidate("B", lexical_score=1.0),
+                ),
+                diagnostics=RetrievalDiagnostics(2, 2, 0.0, plan.route),
+            )
+
+            ranked = components.ranker.rank(state, plan, result)
+
+            self.assertEqual(ranked[0].parent_asin, "A")
+            self.assertGreater(
+                ranked[0].component_scores["constraint_weight"],
+                plan.constraint_weight,
+            )
 
     def test_pipeline_runs_inside_official_evaluator(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

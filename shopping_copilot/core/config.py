@@ -26,6 +26,20 @@ class PolicyConfig:
     question_min_coverage: float
     question_min_score: float
     question_attribute_priors: dict[str, float]
+    coverage_enabled: bool
+    coverage_candidate_limit: int
+    coverage_overlap_threshold: float
+    coverage_min_turn: int
+    coverage_stagnant_turns: int
+
+
+@dataclass(frozen=True)
+class RankingConfig:
+    implementation: str
+    dynamic_constraint_weight: bool
+    constraint_weight_step: float
+    maximum_constraint_weight: float
+    rarity_weighting: bool
 
 
 @dataclass(frozen=True)
@@ -37,14 +51,14 @@ class TraceConfig:
 @dataclass(frozen=True)
 class AppConfig:
     state_implementation: str
-    ranking_implementation: str
+    ranking: RankingConfig
     search: SearchConfig
     policy: PolicyConfig
     trace: TraceConfig
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "baseline.json"
+DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "final.json"
 
 
 def load_config(path: str | Path | None = None) -> AppConfig:
@@ -55,12 +69,22 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     payload = json.loads(config_path.read_text(encoding="utf-8"))
 
     search = payload.get("search", {})
+    ranking = payload.get("ranking", {})
     policy = payload.get("policy", {})
     trace = payload.get("trace", {})
 
     result = AppConfig(
         state_implementation=str(payload.get("state", {}).get("implementation", "rule")),
-        ranking_implementation=str(payload.get("ranking", {}).get("implementation", "heuristic")),
+        ranking=RankingConfig(
+            implementation=str(ranking.get("implementation", "heuristic")),
+            dynamic_constraint_weight=bool(ranking.get("dynamic_constraint_weight", False)),
+            constraint_weight_step=max(0.0, float(ranking.get("constraint_weight_step", 0.08))),
+            maximum_constraint_weight=max(
+                0.0,
+                min(1.0, float(ranking.get("maximum_constraint_weight", 0.55))),
+            ),
+            rarity_weighting=bool(ranking.get("rarity_weighting", False)),
+        ),
         search=SearchConfig(
             implementation=str(search.get("implementation", "hybrid")),
             candidate_k=max(10, int(search.get("candidate_k", 100))),
@@ -81,6 +105,14 @@ def load_config(path: str | Path | None = None) -> AppConfig:
                 str(name): max(0.0, float(value))
                 for name, value in (policy.get("question_attribute_priors") or {}).items()
             },
+            coverage_enabled=bool(policy.get("coverage_enabled", False)),
+            coverage_candidate_limit=max(10, int(policy.get("coverage_candidate_limit", 60))),
+            coverage_overlap_threshold=max(
+                0.0,
+                min(1.0, float(policy.get("coverage_overlap_threshold", 0.90))),
+            ),
+            coverage_min_turn=max(1, int(policy.get("coverage_min_turn", 2))),
+            coverage_stagnant_turns=max(1, int(policy.get("coverage_stagnant_turns", 1))),
         ),
         trace=TraceConfig(
             enabled=bool(trace.get("enabled", False)),
@@ -94,8 +126,8 @@ def load_config(path: str | Path | None = None) -> AppConfig:
 
     if result.state_implementation != "rule":
         raise ValueError(f"Unsupported state implementation: {result.state_implementation}")
-    if result.ranking_implementation != "heuristic":
-        raise ValueError(f"Unsupported ranking implementation: {result.ranking_implementation}")
+    if result.ranking.implementation != "heuristic":
+        raise ValueError(f"Unsupported ranking implementation: {result.ranking.implementation}")
     if result.search.implementation != "hybrid":
         raise ValueError(f"Unsupported search implementation: {result.search.implementation}")
     if result.policy.implementation != "heuristic":

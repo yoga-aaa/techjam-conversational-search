@@ -37,6 +37,12 @@ class SessionState:
     messages: list[str] = field(default_factory=list)
     active_context: list[str] = field(default_factory=list)
     question_scores: dict[str, float] = field(default_factory=dict)
+    shown_asins: set[str] = field(default_factory=set)
+    previous_candidate_ids: tuple[str, ...] = ()
+    previous_slot_signature: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    candidate_overlap: float = 0.0
+    stagnant_candidate_turns: int = 0
+    coverage_mode: bool = False
 
 
 @dataclass(frozen=True)
