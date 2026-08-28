@@ -12,8 +12,7 @@
     "dynamic_constraint_weight": true,
     "constraint_weight_step": 0.08,
     "maximum_constraint_weight": 0.55,
-    "rarity_weighting": true,
-    "profile_affinity_enabled": true
+    "rarity_weighting": true
   },
   "policy": {
     "implementation": "heuristic",

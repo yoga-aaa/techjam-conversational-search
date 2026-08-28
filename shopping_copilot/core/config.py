@@ -40,7 +40,6 @@ class RankingConfig:
     constraint_weight_step: float
     maximum_constraint_weight: float
     rarity_weighting: bool
-    profile_affinity_enabled: bool
 
 
 @dataclass(frozen=True)
@@ -85,7 +84,6 @@ def load_config(path: str | Path | None = None) -> AppConfig:
                 min(1.0, float(ranking.get("maximum_constraint_weight", 0.55))),
             ),
             rarity_weighting=bool(ranking.get("rarity_weighting", False)),
-            profile_affinity_enabled=bool(ranking.get("profile_affinity_enabled", False)),
         ),
         search=SearchConfig(
             implementation=str(search.get("implementation", "hybrid")),
