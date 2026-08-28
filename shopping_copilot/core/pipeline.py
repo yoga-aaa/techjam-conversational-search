@@ -7,6 +7,25 @@ from time import perf_counter
 from shopping_copilot.core.config import load_config
 from shopping_copilot.core.contracts import ModelUsage
 from shopping_copilot.core.factory import Components, build_components
+from shopping_copilot.policy.heuristic import semantic_signature
+
+
+def _prioritize_top_semantic_group(
+    ranked: list,
+    response_ranked: list,
+) -> list:
+    if not ranked:
+        return response_ranked
+    top_signature = semantic_signature(ranked[0])
+    equivalent = [
+        item for item in response_ranked
+        if semantic_signature(item) == top_signature
+    ]
+    others = [
+        item for item in response_ranked
+        if semantic_signature(item) != top_signature
+    ]
+    return equivalent + others
 
 
 class ShoppingCopilotAgent:
@@ -66,6 +85,14 @@ class ShoppingCopilotAgent:
         response_ranked = ranked
         if state.coverage_mode:
             response_ranked = self.components.coverage_manager.order_for_response(state, ranked)
+            if (
+                self.config.policy.adaptive_semantic_slate
+                and decision.ask_attribute is not None
+            ):
+                response_ranked = _prioritize_top_semantic_group(
+                    list(ranked),
+                    list(response_ranked),
+                )
 
         self.components.state_tracker.mark_asked(session_id, decision.ask_attribute)
         latency_ms = round((perf_counter() - started) * 1000.0, 3)
@@ -87,6 +114,7 @@ class ShoppingCopilotAgent:
             "coverage_mode": state.coverage_mode,
             "shown_candidate_count": len(state.shown_asins),
             "recommendation_count": decision.recommendation_count,
+            "semantic_slate_size": decision.recommendation_count,
             "latency_ms": latency_ms,
         })
         response = self.components.response_builder.build(

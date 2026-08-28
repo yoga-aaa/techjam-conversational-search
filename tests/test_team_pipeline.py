@@ -15,7 +15,9 @@ from shopping_copilot.core.contracts import (
     SessionState,
 )
 from shopping_copilot.core.factory import build_components
+from shopping_copilot.core.pipeline import _prioritize_top_semantic_group
 from shopping_copilot.policy.information_gain import InformationGainQuestionScorer
+from shopping_copilot.policy.heuristic import adaptive_semantic_slate_size
 from shopping_copilot.state.rule_state import RuleStateTracker
 from starter.agent import Agent
 
@@ -30,6 +32,43 @@ PROFILE = {
 
 
 class TeamPipelineTest(unittest.TestCase):
+    @staticmethod
+    def _semantic_candidate(
+        parent_asin: str,
+        matches: int,
+        unknowns: int,
+    ) -> RankedCandidate:
+        return RankedCandidate(
+            parent_asin,
+            1.0,
+            {
+                "semantic_match_count": float(matches),
+                "semantic_unknown_count": float(unknowns),
+                "semantic_conflict_count": 0.0,
+            },
+        )
+
+    def test_adaptive_slate_equals_rank_one_semantic_group_size(self) -> None:
+        ranked = [
+            self._semantic_candidate("A", 3, 0),
+            self._semantic_candidate("B", 3, 0),
+            self._semantic_candidate("C", 2, 1),
+        ]
+
+        self.assertEqual(adaptive_semantic_slate_size(ranked), 2)
+
+    def test_coverage_stays_within_rank_one_semantic_group(self) -> None:
+        ranked = [
+            self._semantic_candidate("A", 3, 0),
+            self._semantic_candidate("B", 3, 0),
+            self._semantic_candidate("C", 2, 1),
+        ]
+        coverage_order = [ranked[2], ranked[1], ranked[0]]
+
+        ordered = _prioritize_top_semantic_group(ranked, coverage_order)
+
+        self.assertEqual([item.parent_asin for item in ordered], ["B", "A", "C"])
+
     def _catalog(self, root: Path) -> Path:
         products = [
             {

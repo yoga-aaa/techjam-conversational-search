@@ -27,6 +27,32 @@ QUESTION_TEMPLATES = {
 }
 
 
+def semantic_signature(item: RankedCandidate) -> tuple[int, int, int]:
+    """Return the conservative tri-state evidence counts used for ambiguity."""
+
+    scores = item.component_scores
+    return (
+        int(round(scores.get("semantic_conflict_count", 0.0))),
+        int(round(scores.get("semantic_match_count", 0.0))),
+        int(round(scores.get("semantic_unknown_count", 0.0))),
+    )
+
+
+def adaptive_semantic_slate_size(
+    ranked: Sequence[RankedCandidate],
+) -> int:
+    """Show every candidate semantically tied with rank one, capped by the API."""
+
+    if not ranked:
+        return 0
+    top_signature = semantic_signature(ranked[0])
+    group_size = sum(
+        semantic_signature(item) == top_signature
+        for item in ranked
+    )
+    return max(1, min(10, group_size))
+
+
 class HeuristicPolicy:
     """Deterministic clarification and recommendation policy."""
 
@@ -93,7 +119,10 @@ class HeuristicPolicy:
                 should_ask=True,
                 ask_attribute=attribute,
                 message=QUESTION_TEMPLATES[attribute],
-                recommendation_count=early_decision.recommendation_count,
+                recommendation_count=self._clarification_recommendation_count(
+                    ranked,
+                    early_decision.recommendation_count,
+                ),
             )
 
         if len(ranked) >= 2:
@@ -115,8 +144,20 @@ class HeuristicPolicy:
             should_ask=True,
             ask_attribute=attribute,
             message=QUESTION_TEMPLATES[attribute],
-            recommendation_count=self.policy_config.uncertain_recommendation_count,
+            recommendation_count=self._clarification_recommendation_count(
+                ranked,
+                self.policy_config.uncertain_recommendation_count,
+            ),
         )
+
+    def _clarification_recommendation_count(
+        self,
+        ranked: Sequence[RankedCandidate],
+        fallback: int,
+    ) -> int:
+        if not self.policy_config.adaptive_semantic_slate:
+            return fallback
+        return adaptive_semantic_slate_size(ranked)
 
     def _select_attribute(
         self,

@@ -31,6 +31,7 @@ class PolicyConfig:
     coverage_overlap_threshold: float
     coverage_min_turn: int
     coverage_stagnant_turns: int
+    adaptive_semantic_slate: bool
 
 
 @dataclass(frozen=True)
@@ -113,6 +114,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             ),
             coverage_min_turn=max(1, int(policy.get("coverage_min_turn", 2))),
             coverage_stagnant_turns=max(1, int(policy.get("coverage_stagnant_turns", 1))),
+            adaptive_semantic_slate=bool(policy.get("adaptive_semantic_slate", False)),
         ),
         trace=TraceConfig(
             enabled=bool(trace.get("enabled", False)),

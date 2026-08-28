@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 
-from shopping_copilot.catalog.constraints import violates_negative_slots
+from shopping_copilot.catalog.constraints import product_matches_value, violates_negative_slots
 from shopping_copilot.catalog.store import CatalogStore
 from shopping_copilot.core.config import RankingConfig
 from shopping_copilot.core.contracts import RankedCandidate, RetrievalResult, SearchPlan, SessionState
@@ -28,6 +28,12 @@ class HeuristicRanker:
         max_dense = max((item.dense_score for item in result.candidates), default=1.0) or 1.0
         constraint_values = list(dict.fromkeys(
             value.lower()
+            for name, values in state.active_slots.items()
+            if name != "budget"
+            for value in values
+        ))
+        constraint_items = list(dict.fromkeys(
+            (name, value.lower())
             for name, values in state.active_slots.items()
             if name != "budget"
             for value in values
@@ -89,6 +95,11 @@ class HeuristicRanker:
                 else 0.0
             )
             constraint_score = max(text_constraint_score, candidate.constraint_score)
+            match_count = sum(
+                product_matches_value(product, name, value)
+                for name, value in constraint_items
+            )
+            unknown_count = len(constraint_items) - match_count
             profile_score = (
                 sum(term in text for term in state.profile_terms) / len(state.profile_terms)
                 if state.profile_terms
@@ -112,6 +123,12 @@ class HeuristicRanker:
                         "constraint": constraint_score,
                         "profile": profile_score,
                         "constraint_weight": effective_constraint_weight,
+                        "semantic_match_count": float(match_count),
+                        "semantic_unknown_count": float(unknown_count),
+                        # Explicit negative matches have already been removed by
+                        # the shared final guard.  Do not infer new conflicts
+                        # from missing catalog text in this conservative test.
+                        "semantic_conflict_count": 0.0,
                     },
                 )
             )
