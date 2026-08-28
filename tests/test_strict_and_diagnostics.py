@@ -8,6 +8,7 @@ from pathlib import Path
 from shopping_copilot.catalog.store import CatalogStore
 from shopping_copilot.core.contracts import SearchPlan
 from shopping_copilot.retrieval.bm25 import BM25Retriever
+from starter.agent import Agent
 
 
 def _plan(
@@ -114,6 +115,31 @@ class StrictAndDiagnosticsTest(unittest.TestCase):
             self.assertEqual(retriever._strict_expression(duplicate_groups), "")
             self.assertEqual(retriever.strict_candidates(one_group, 10), ())
             self.assertEqual(retriever.strict_candidates(duplicate_groups, 10), ())
+
+    def test_early_clarification_response_uses_full_reranked_pool(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalog = self._store(root).catalog_path
+            config = json.loads(Path("configs/final.json").read_text(encoding="utf-8"))
+            config["search"]["probe_overload_threshold"] = 1
+            config["ranking"]["constraint_weight_step"] = 0.30
+            config["ranking"]["maximum_constraint_weight"] = 0.95
+            config_path = root / "config.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            agent = Agent(catalog, config_path=config_path)
+            agent.reset("full-rerank-response", {})
+
+            response = agent.respond(
+                "full-rerank-response",
+                "I'm looking for women. A key requirement is: cotton.",
+                1,
+                10,
+            )
+
+            self.assertIn(
+                "TARGET",
+                {item["parent_asin"] for item in response["recommendations"]},
+            )
 
 
 if __name__ == "__main__":
