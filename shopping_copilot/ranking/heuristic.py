@@ -6,6 +6,7 @@ from shopping_copilot.catalog.constraints import violates_negative_slots
 from shopping_copilot.catalog.store import CatalogStore
 from shopping_copilot.core.config import RankingConfig
 from shopping_copilot.core.contracts import RankedCandidate, RetrievalResult, SearchPlan, SessionState
+from shopping_copilot.ranking.profile_affinity import CatalogProfileAffinityScorer
 
 
 class HeuristicRanker:
@@ -14,6 +15,11 @@ class HeuristicRanker:
     def __init__(self, store: CatalogStore, config: RankingConfig) -> None:
         self.store = store
         self.config = config
+        self.profile_affinity = (
+            CatalogProfileAffinityScorer(store)
+            if config.profile_affinity_enabled
+            else None
+        )
 
     def rank(
         self,
@@ -90,9 +96,13 @@ class HeuristicRanker:
             )
             constraint_score = max(text_constraint_score, candidate.constraint_score)
             profile_score = (
-                sum(term in text for term in state.profile_terms) / len(state.profile_terms)
-                if state.profile_terms
-                else 0.0
+                self.profile_affinity.score(state.profile_terms, product)
+                if self.profile_affinity is not None
+                else (
+                    sum(term in text for term in state.profile_terms) / len(state.profile_terms)
+                    if state.profile_terms
+                    else 0.0
+                )
             )
             lexical_score = candidate.lexical_score / max_lexical
             dense_score = candidate.dense_score / max_dense if candidate.dense_score else 0.0
