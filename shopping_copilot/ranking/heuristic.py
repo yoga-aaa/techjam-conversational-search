@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 
+from shopping_copilot.catalog.constraints import violates_negative_slots
 from shopping_copilot.catalog.store import CatalogStore
 from shopping_copilot.core.config import RankingConfig
 from shopping_copilot.core.contracts import RankedCandidate, RetrievalResult, SearchPlan, SessionState
@@ -73,6 +74,8 @@ class HeuristicRanker:
         for candidate in result.candidates:
             product = candidate_products[candidate.parent_asin]
             if product is None:
+                continue
+            if violates_negative_slots(product, state.negative_slots):
                 continue
             text = product.searchable_text.lower()
             total_constraint_weight = sum(constraint_weights.values())

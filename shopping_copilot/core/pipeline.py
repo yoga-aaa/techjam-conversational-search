@@ -86,6 +86,7 @@ class ShoppingCopilotAgent:
             "turn": turn,
             "intent_mode": state.intent_mode,
             "active_slots": {key: list(values) for key, values in state.active_slots.items()},
+            "negative_slots": {key: list(values) for key, values in state.negative_slots.items()},
             "excluded_terms": sorted(state.excluded_terms),
             "route": plan.route,
             "lexical_terms": list(plan.lexical_terms),

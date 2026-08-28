@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
+from shopping_copilot.catalog.constraints import matches_any_excluded_term
 from shopping_copilot.catalog.store import CatalogStore
 from shopping_copilot.core.contracts import Candidate, RetrievalDiagnostics, RetrievalResult, SearchPlan
 
@@ -80,7 +81,6 @@ class BM25Retriever:
         ).fetchall()
 
         price_max = plan.hard_filters.get("price_max")
-        excluded = tuple(term.lower() for term in plan.excluded_terms)
         candidates: list[Candidate] = []
         for parent_asin, raw_score in rows:
             product = self.store.get(str(parent_asin))
@@ -88,8 +88,7 @@ class BM25Retriever:
                 continue
             if price_max is not None and product.price is not None and product.price > float(price_max):
                 continue
-            searchable = product.searchable_text.lower()
-            if excluded and any(term in searchable for term in excluded):
+            if matches_any_excluded_term(product, plan.excluded_terms):
                 continue
             candidates.append(
                 Candidate(
