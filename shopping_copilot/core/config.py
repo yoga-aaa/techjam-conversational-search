@@ -32,6 +32,7 @@ class PolicyConfig:
     coverage_min_turn: int
     coverage_stagnant_turns: int
     adaptive_semantic_slate: bool
+    adaptive_semantic_slate_mode: str
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class RankingConfig:
     constraint_weight_step: float
     maximum_constraint_weight: float
     rarity_weighting: bool
+    global_idf_semantic_priority: bool
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,9 @@ def load_config(path: str | Path | None = None) -> AppConfig:
                 min(1.0, float(ranking.get("maximum_constraint_weight", 0.55))),
             ),
             rarity_weighting=bool(ranking.get("rarity_weighting", False)),
+            global_idf_semantic_priority=bool(
+                ranking.get("global_idf_semantic_priority", False)
+            ),
         ),
         search=SearchConfig(
             implementation=str(search.get("implementation", "hybrid")),
@@ -115,6 +120,9 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             coverage_min_turn=max(1, int(policy.get("coverage_min_turn", 2))),
             coverage_stagnant_turns=max(1, int(policy.get("coverage_stagnant_turns", 1))),
             adaptive_semantic_slate=bool(policy.get("adaptive_semantic_slate", False)),
+            adaptive_semantic_slate_mode=str(
+                policy.get("adaptive_semantic_slate_mode", "count")
+            ),
         ),
         trace=TraceConfig(
             enabled=bool(trace.get("enabled", False)),
@@ -136,5 +144,10 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         raise ValueError(f"Unsupported policy implementation: {result.policy.implementation}")
     if result.policy.question_strategy not in {"fixed", "information_gain"}:
         raise ValueError(f"Unsupported question strategy: {result.policy.question_strategy}")
+    if result.policy.adaptive_semantic_slate_mode not in {"count", "exact"}:
+        raise ValueError(
+            "Unsupported adaptive semantic slate mode: "
+            f"{result.policy.adaptive_semantic_slate_mode}"
+        )
 
     return result

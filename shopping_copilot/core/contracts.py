@@ -99,6 +99,7 @@ class RankedCandidate:
     parent_asin: str
     final_score: float
     component_scores: dict[str, float]
+    semantic_signature: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)

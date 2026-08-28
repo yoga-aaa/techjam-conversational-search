@@ -27,9 +27,14 @@ QUESTION_TEMPLATES = {
 }
 
 
-def semantic_signature(item: RankedCandidate) -> tuple[int, int, int]:
+def semantic_signature(
+    item: RankedCandidate,
+    mode: str = "count",
+) -> tuple[int, ...]:
     """Return the conservative tri-state evidence counts used for ambiguity."""
 
+    if mode == "exact" and item.semantic_signature:
+        return item.semantic_signature
     scores = item.component_scores
     return (
         int(round(scores.get("semantic_conflict_count", 0.0))),
@@ -40,14 +45,15 @@ def semantic_signature(item: RankedCandidate) -> tuple[int, int, int]:
 
 def adaptive_semantic_slate_size(
     ranked: Sequence[RankedCandidate],
+    mode: str = "count",
 ) -> int:
     """Show every candidate semantically tied with rank one, capped by the API."""
 
     if not ranked:
         return 0
-    top_signature = semantic_signature(ranked[0])
+    top_signature = semantic_signature(ranked[0], mode)
     group_size = sum(
-        semantic_signature(item) == top_signature
+        semantic_signature(item, mode) == top_signature
         for item in ranked
     )
     return max(1, min(10, group_size))
@@ -157,7 +163,10 @@ class HeuristicPolicy:
     ) -> int:
         if not self.policy_config.adaptive_semantic_slate:
             return fallback
-        return adaptive_semantic_slate_size(ranked)
+        return adaptive_semantic_slate_size(
+            ranked,
+            self.policy_config.adaptive_semantic_slate_mode,
+        )
 
     def _select_attribute(
         self,

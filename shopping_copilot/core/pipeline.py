@@ -13,17 +13,18 @@ from shopping_copilot.policy.heuristic import semantic_signature
 def _prioritize_top_semantic_group(
     ranked: list,
     response_ranked: list,
+    mode: str = "count",
 ) -> list:
     if not ranked:
         return response_ranked
-    top_signature = semantic_signature(ranked[0])
+    top_signature = semantic_signature(ranked[0], mode)
     equivalent = [
         item for item in response_ranked
-        if semantic_signature(item) == top_signature
+        if semantic_signature(item, mode) == top_signature
     ]
     others = [
         item for item in response_ranked
-        if semantic_signature(item) != top_signature
+        if semantic_signature(item, mode) != top_signature
     ]
     return equivalent + others
 
@@ -92,6 +93,7 @@ class ShoppingCopilotAgent:
                 response_ranked = _prioritize_top_semantic_group(
                     list(ranked),
                     list(response_ranked),
+                    self.config.policy.adaptive_semantic_slate_mode,
                 )
 
         self.components.state_tracker.mark_asked(session_id, decision.ask_attribute)

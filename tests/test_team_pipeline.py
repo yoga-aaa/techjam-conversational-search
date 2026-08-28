@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from evaluator.local_evaluator import catalog_index, evaluate
+from shopping_copilot.catalog.store import CatalogStore
 from shopping_copilot.core.config import load_config
 from shopping_copilot.core.contracts import (
     Candidate,
@@ -18,6 +19,7 @@ from shopping_copilot.core.factory import build_components
 from shopping_copilot.core.pipeline import _prioritize_top_semantic_group
 from shopping_copilot.policy.information_gain import InformationGainQuestionScorer
 from shopping_copilot.policy.heuristic import adaptive_semantic_slate_size
+from shopping_copilot.ranking.global_idf import GlobalCatalogIDF
 from shopping_copilot.state.rule_state import RuleStateTracker
 from starter.agent import Agent
 
@@ -56,6 +58,35 @@ class TeamPipelineTest(unittest.TestCase):
         ]
 
         self.assertEqual(adaptive_semantic_slate_size(ranked), 2)
+
+    def test_exact_semantic_slate_distinguishes_which_attribute_matched(self) -> None:
+        ranked = [
+            RankedCandidate("A", 1.0, {}, semantic_signature=(2, 2, 1)),
+            RankedCandidate("B", 0.9, {}, semantic_signature=(2, 2, 1)),
+            RankedCandidate("C", 0.8, {}, semantic_signature=(2, 1, 2)),
+        ]
+
+        self.assertEqual(adaptive_semantic_slate_size(ranked, "exact"), 2)
+
+    def test_global_idf_gives_rare_catalog_value_more_weight(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog_path = Path(directory) / "catalog.jsonl"
+            products = [
+                {"parent_asin": "A", "title": "common rare", "features": []},
+                {"parent_asin": "B", "title": "common", "features": []},
+                {"parent_asin": "C", "title": "common", "features": []},
+            ]
+            catalog_path.write_text(
+                "\n".join(json.dumps(product) for product in products) + "\n",
+                encoding="utf-8",
+            )
+
+            index = GlobalCatalogIDF(CatalogStore(catalog_path))
+
+        self.assertGreater(
+            index.value_idf("feature", "rare"),
+            index.value_idf("feature", "common"),
+        )
 
     def test_coverage_stays_within_rank_one_semantic_group(self) -> None:
         ranked = [
