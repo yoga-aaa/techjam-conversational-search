@@ -46,17 +46,41 @@ def semantic_signature(
 def adaptive_semantic_slate_size(
     ranked: Sequence[RankedCandidate],
     mode: str = "count",
+    anchor: str = "rank_one",
 ) -> int:
-    """Show every candidate semantically tied with rank one, capped by the API."""
+    """Show every candidate tied with the selected semantic anchor, API-capped."""
 
     if not ranked:
         return 0
-    top_signature = semantic_signature(ranked[0], mode)
+    top_signature = semantic_anchor_signature(ranked, mode, anchor)
     group_size = sum(
         semantic_signature(item, mode) == top_signature
         for item in ranked
     )
     return max(1, min(10, group_size))
+
+
+def semantic_anchor_signature(
+    ranked: Sequence[RankedCandidate],
+    mode: str = "count",
+    anchor: str = "rank_one",
+) -> tuple[int, ...]:
+    """Choose the slate group from rank one or the strongest semantic tier."""
+
+    if not ranked:
+        return ()
+    if anchor == "strongest_semantic_tier":
+        anchor_item = max(
+            ranked,
+            key=lambda item: (
+                item.component_scores.get("semantic_match_count", 0.0),
+                item.component_scores.get("semantic_global_idf_coverage", 0.0),
+                item.final_score,
+            ),
+        )
+    else:
+        anchor_item = ranked[0]
+    return semantic_signature(anchor_item, mode)
 
 
 class HeuristicPolicy:
@@ -166,6 +190,7 @@ class HeuristicPolicy:
         return adaptive_semantic_slate_size(
             ranked,
             self.policy_config.adaptive_semantic_slate_mode,
+            self.policy_config.adaptive_semantic_slate_anchor,
         )
 
     def _select_attribute(

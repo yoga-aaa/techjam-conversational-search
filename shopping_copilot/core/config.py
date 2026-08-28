@@ -33,6 +33,7 @@ class PolicyConfig:
     coverage_stagnant_turns: int
     adaptive_semantic_slate: bool
     adaptive_semantic_slate_mode: str
+    adaptive_semantic_slate_anchor: str
 
 
 @dataclass(frozen=True)
@@ -42,7 +43,7 @@ class RankingConfig:
     constraint_weight_step: float
     maximum_constraint_weight: float
     rarity_weighting: bool
-    global_idf_semantic_priority: bool
+    semantic_priority_mode: str
 
 
 @dataclass(frozen=True)
@@ -87,8 +88,13 @@ def load_config(path: str | Path | None = None) -> AppConfig:
                 min(1.0, float(ranking.get("maximum_constraint_weight", 0.55))),
             ),
             rarity_weighting=bool(ranking.get("rarity_weighting", False)),
-            global_idf_semantic_priority=bool(
-                ranking.get("global_idf_semantic_priority", False)
+            semantic_priority_mode=str(
+                ranking.get(
+                    "semantic_priority_mode",
+                    "global_idf_first"
+                    if ranking.get("global_idf_semantic_priority", False)
+                    else "legacy",
+                )
             ),
         ),
         search=SearchConfig(
@@ -123,6 +129,9 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             adaptive_semantic_slate_mode=str(
                 policy.get("adaptive_semantic_slate_mode", "count")
             ),
+            adaptive_semantic_slate_anchor=str(
+                policy.get("adaptive_semantic_slate_anchor", "rank_one")
+            ),
         ),
         trace=TraceConfig(
             enabled=bool(trace.get("enabled", False)),
@@ -148,6 +157,23 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         raise ValueError(
             "Unsupported adaptive semantic slate mode: "
             f"{result.policy.adaptive_semantic_slate_mode}"
+        )
+    if result.policy.adaptive_semantic_slate_anchor not in {
+        "rank_one",
+        "strongest_semantic_tier",
+    }:
+        raise ValueError(
+            "Unsupported adaptive semantic slate anchor: "
+            f"{result.policy.adaptive_semantic_slate_anchor}"
+        )
+    if result.ranking.semantic_priority_mode not in {
+        "legacy",
+        "global_idf_first",
+        "match_count_then_global_idf",
+    }:
+        raise ValueError(
+            "Unsupported semantic priority mode: "
+            f"{result.ranking.semantic_priority_mode}"
         )
 
     return result

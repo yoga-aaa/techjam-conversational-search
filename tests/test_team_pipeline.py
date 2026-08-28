@@ -68,6 +68,56 @@ class TeamPipelineTest(unittest.TestCase):
 
         self.assertEqual(adaptive_semantic_slate_size(ranked, "exact"), 2)
 
+    def test_strongest_semantic_anchor_ignores_weaker_legacy_rank_one(self) -> None:
+        ranked = [
+            RankedCandidate(
+                "legacy-top",
+                1.0,
+                {
+                    "semantic_match_count": 1.0,
+                    "semantic_global_idf_coverage": 0.9,
+                },
+                semantic_signature=(2, 1, 1),
+            ),
+            RankedCandidate(
+                "semantic-a",
+                0.8,
+                {
+                    "semantic_match_count": 2.0,
+                    "semantic_global_idf_coverage": 0.5,
+                },
+                semantic_signature=(2, 2, 1),
+            ),
+            RankedCandidate(
+                "semantic-b",
+                0.7,
+                {
+                    "semantic_match_count": 2.0,
+                    "semantic_global_idf_coverage": 0.5,
+                },
+                semantic_signature=(2, 2, 1),
+            ),
+        ]
+
+        self.assertEqual(
+            adaptive_semantic_slate_size(
+                ranked,
+                "exact",
+                "strongest_semantic_tier",
+            ),
+            2,
+        )
+        ordered = _prioritize_top_semantic_group(
+            ranked,
+            ranked,
+            "exact",
+            "strongest_semantic_tier",
+        )
+        self.assertEqual(
+            [item.parent_asin for item in ordered],
+            ["semantic-a", "semantic-b", "legacy-top"],
+        )
+
     def test_global_idf_gives_rare_catalog_value_more_weight(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             catalog_path = Path(directory) / "catalog.jsonl"
@@ -86,6 +136,57 @@ class TeamPipelineTest(unittest.TestCase):
         self.assertGreater(
             index.value_idf("feature", "rare"),
             index.value_idf("feature", "common"),
+        )
+
+    def test_match_count_precedes_global_idf_in_hierarchical_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog_path = Path(directory) / "catalog.jsonl"
+            products = [
+                {"parent_asin": "A", "title": "commonone commontwo"},
+                {"parent_asin": "B", "title": "rare"},
+                {"parent_asin": "C", "title": "commonone commontwo"},
+            ]
+            catalog_path.write_text(
+                "\n".join(json.dumps(product) for product in products) + "\n",
+                encoding="utf-8",
+            )
+            state = SessionState(
+                "hierarchical",
+                intent_mode="buying",
+                active_slots={
+                    "feature": ["commonone", "commontwo", "rare"],
+                },
+            )
+            candidates = RetrievalResult(
+                candidates=(
+                    Candidate("A", lexical_score=1.0),
+                    Candidate("B", lexical_score=1.0),
+                ),
+                diagnostics=RetrievalDiagnostics(2, 1, 0.0, "buying"),
+            )
+
+            idf_first = build_components(
+                catalog_path,
+                load_config(
+                    "configs/experiments/e6_r5b_exact_signature_global_idf_slate.json"
+                ),
+            )
+            hierarchical = build_components(
+                catalog_path,
+                load_config(
+                    "configs/experiments/"
+                    "e6_r5c_match_count_then_global_idf_then_rerank.json"
+                ),
+            )
+            plan = hierarchical.planner.build(state)
+            idf_ranked = idf_first.ranker.rank(state, plan, candidates)
+            hierarchical_ranked = hierarchical.ranker.rank(state, plan, candidates)
+
+        self.assertEqual(idf_ranked[0].parent_asin, "B")
+        self.assertEqual(hierarchical_ranked[0].parent_asin, "A")
+        self.assertEqual(
+            hierarchical_ranked[0].component_scores["semantic_match_count"],
+            2.0,
         )
 
     def test_coverage_stays_within_rank_one_semantic_group(self) -> None:

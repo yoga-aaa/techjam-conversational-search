@@ -17,7 +17,7 @@ class HeuristicRanker:
         self.config = config
         self.global_idf = (
             GlobalCatalogIDF(store)
-            if config.global_idf_semantic_priority
+            if config.semantic_priority_mode != "legacy"
             else None
         )
 
@@ -157,10 +157,20 @@ class HeuristicRanker:
                 )
             )
 
-        if self.config.global_idf_semantic_priority:
+        if self.config.semantic_priority_mode == "global_idf_first":
             return sorted(
                 ranked,
                 key=lambda item: (
+                    item.component_scores.get("semantic_global_idf_coverage", 0.0),
+                    item.final_score,
+                ),
+                reverse=True,
+            )
+        if self.config.semantic_priority_mode == "match_count_then_global_idf":
+            return sorted(
+                ranked,
+                key=lambda item: (
+                    item.component_scores.get("semantic_match_count", 0.0),
                     item.component_scores.get("semantic_global_idf_coverage", 0.0),
                     item.final_score,
                 ),

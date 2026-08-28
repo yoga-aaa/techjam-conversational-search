@@ -7,17 +7,18 @@ from time import perf_counter
 from shopping_copilot.core.config import load_config
 from shopping_copilot.core.contracts import ModelUsage
 from shopping_copilot.core.factory import Components, build_components
-from shopping_copilot.policy.heuristic import semantic_signature
+from shopping_copilot.policy.heuristic import semantic_anchor_signature, semantic_signature
 
 
 def _prioritize_top_semantic_group(
     ranked: list,
     response_ranked: list,
     mode: str = "count",
+    anchor: str = "rank_one",
 ) -> list:
     if not ranked:
         return response_ranked
-    top_signature = semantic_signature(ranked[0], mode)
+    top_signature = semantic_anchor_signature(ranked, mode, anchor)
     equivalent = [
         item for item in response_ranked
         if semantic_signature(item, mode) == top_signature
@@ -94,6 +95,7 @@ class ShoppingCopilotAgent:
                     list(ranked),
                     list(response_ranked),
                     self.config.policy.adaptive_semantic_slate_mode,
+                    self.config.policy.adaptive_semantic_slate_anchor,
                 )
 
         self.components.state_tracker.mark_asked(session_id, decision.ask_attribute)
