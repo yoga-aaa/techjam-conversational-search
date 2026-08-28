@@ -30,6 +30,7 @@ class SessionState:
     intent_mode: str = "uncertain"
     profile_terms: tuple[str, ...] = ()
     active_slots: dict[str, list[str]] = field(default_factory=dict)
+    negative_slots: dict[str, list[str]] = field(default_factory=dict)
     excluded_terms: set[str] = field(default_factory=set)
     no_preference_attributes: set[str] = field(default_factory=set)
     asked_attributes: list[str] = field(default_factory=list)

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import re
 from collections import Counter, defaultdict
 
+from shopping_copilot.catalog.constraints import matches_any_excluded_term, normalized_tokens
 from shopping_copilot.catalog.store import CatalogStore
 from shopping_copilot.core.contracts import Candidate, RetrievalDiagnostics, RetrievalResult, SearchPlan
 
 
-TOKEN_RE = re.compile(r"[a-z0-9]+", re.IGNORECASE)
 STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from",
     "i", "in", "is", "it", "my", "of", "on", "or", "the", "this", "to",
@@ -17,9 +16,9 @@ STOPWORDS = {
 
 def _tokens(value: str) -> set[str]:
     return {
-        token.lower()
-        for token in TOKEN_RE.findall(value)
-        if len(token) > 1 and token.lower() not in STOPWORDS
+        token
+        for token in normalized_tokens(value)
+        if len(token) > 1 and token not in STOPWORDS
     }
 
 
@@ -106,7 +105,6 @@ class StructuredRetriever:
             candidate_ids = narrowed_ids
 
         price_max = plan.hard_filters.get("price_max")
-        excluded = tuple(term.lower() for term in plan.excluded_terms)
         scores: dict[str, float] = {}
         denominator = float(len(constraints))
         for parent_asin in candidate_ids:
@@ -115,8 +113,7 @@ class StructuredRetriever:
                 continue
             if price_max is not None and product.price is not None and product.price > float(price_max):
                 continue
-            searchable = product.searchable_text.lower()
-            if excluded and any(term in searchable for term in excluded):
+            if matches_any_excluded_term(product, plan.excluded_terms):
                 continue
             score = sum(values.get(parent_asin, 0.0) for values in attribute_scores.values()) / denominator
             if score > 0.0:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from shopping_copilot.catalog.constraints import normalized_value
 from shopping_copilot.core.config import PolicyConfig
 from shopping_copilot.core.contracts import RankedCandidate, SessionState
 
@@ -29,12 +30,27 @@ class CandidateCoverageManager:
         previous_set = set(state.previous_candidate_ids)
         union = current_set | previous_set
         overlap = len(current_set & previous_set) / len(union) if union else 0.0
-        slot_signature = tuple(
-            sorted((name, tuple(values)) for name, values in state.active_slots.items())
+        signature_entries: list[tuple[str, tuple[str, ...]]] = []
+        for name, values in state.active_slots.items():
+            normalized = tuple(sorted({normalized_value(value) for value in values if normalized_value(value)}))
+            if normalized:
+                signature_entries.append((f"+{name}", normalized))
+        for name, values in state.negative_slots.items():
+            normalized = tuple(sorted({normalized_value(value) for value in values if normalized_value(value)}))
+            if normalized:
+                signature_entries.append((f"-{name}", normalized))
+        for name in state.no_preference_attributes:
+            signature_entries.append((f"~{name}", ()))
+        slot_signature = tuple(sorted(signature_entries))
+        effective_signature = tuple(
+            entry for entry in slot_signature if not entry[0].startswith("~")
+        )
+        previous_effective_signature = tuple(
+            entry for entry in state.previous_slot_signature if not entry[0].startswith("~")
         )
         no_new_constraints = (
             bool(state.previous_slot_signature)
-            and slot_signature == state.previous_slot_signature
+            and effective_signature == previous_effective_signature
         )
         stable_candidates = (
             bool(previous_set)
