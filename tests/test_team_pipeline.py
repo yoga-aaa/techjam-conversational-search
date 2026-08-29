@@ -166,6 +166,26 @@ class TeamPipelineTest(unittest.TestCase):
             self.assertIn("A", by_id)
             self.assertIn("structured", by_id["A"].source_routes)
 
+    def test_category_anchor_route_contributes_exact_category_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = self._catalog(Path(directory))
+            config = load_config("configs/experiments/smart_slate.json")
+            components = build_components(catalog, config)
+            state = components.state_tracker.reset("anchor", PROFILE)
+            state = components.state_tracker.update(
+                "anchor",
+                "I'm looking for Shoes. A key requirement is: waterproof.",
+                1,
+            )
+            plan = components.planner.build(state)
+
+            result = components.retriever.retrieve(plan)
+            by_id = {candidate.parent_asin: candidate for candidate in result.candidates}
+
+            self.assertTrue(config.search.category_anchor_enabled)
+            self.assertIn("A", by_id)
+            self.assertIn("category_anchor", by_id["A"].source_routes)
+
     def test_browsing_turn_asks_a_structured_question(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             catalog = self._catalog(Path(directory))

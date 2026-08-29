@@ -13,6 +13,7 @@ class SearchConfig:
     probe_overload_threshold: int
     dense_enabled: bool
     structured_enabled: bool
+    category_anchor_enabled: bool
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             probe_overload_threshold=max(10, int(search.get("probe_overload_threshold", 2000))),
             dense_enabled=bool(search.get("dense_enabled", False)),
             structured_enabled=bool(search.get("structured_enabled", False)),
+            category_anchor_enabled=bool(search.get("category_anchor_enabled", False)),
         ),
         policy=PolicyConfig(
             implementation=str(policy.get("implementation", "heuristic")),

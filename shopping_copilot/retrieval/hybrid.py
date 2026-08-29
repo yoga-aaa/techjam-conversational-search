@@ -9,14 +9,24 @@ from shopping_copilot.core.interfaces import Retriever
 class HybridRetriever:
     """Combines candidate-search routes without changing the pipeline contract."""
 
-    def __init__(self, lexical: Retriever, dense: Retriever, structured: Retriever) -> None:
+    def __init__(
+        self,
+        lexical: Retriever,
+        dense: Retriever,
+        structured: Retriever,
+        category_anchor: Retriever,
+    ) -> None:
         self.lexical = lexical
         self.dense = dense
         self.structured = structured
+        self.category_anchor = category_anchor
 
     def probe(self, plan: SearchPlan) -> RetrievalDiagnostics:
         lexical = self.lexical.probe(plan)
         diagnostics = [lexical]
+        anchor = self.category_anchor.probe(plan)
+        if anchor.candidate_count:
+            diagnostics.append(anchor)
         if plan.use_structured:
             diagnostics.append(self.structured.probe(plan))
         if plan.use_dense:
@@ -30,6 +40,7 @@ class HybridRetriever:
 
     def retrieve(self, plan: SearchPlan) -> RetrievalResult:
         lexical_result = self.lexical.retrieve(plan)
+        anchor_result = self.category_anchor.retrieve(plan)
         structured_result = (
             self.structured.retrieve(plan)
             if plan.use_structured
@@ -40,7 +51,7 @@ class HybridRetriever:
             if plan.use_dense
             else RetrievalResult((), lexical_result.diagnostics)
         )
-        if not structured_result.candidates and not dense_result.candidates:
+        if not anchor_result.candidates and not structured_result.candidates and not dense_result.candidates:
             return lexical_result
 
         combined: dict[str, Candidate] = {}
@@ -51,6 +62,16 @@ class HybridRetriever:
                 existing,
                 lexical_score=max(existing.lexical_score, candidate.lexical_score),
                 source_routes=tuple(sorted(set(existing.source_routes) | set(candidate.source_routes) | {"bm25"})),
+            )
+            fusion_scores[candidate.parent_asin] = fusion_scores.get(candidate.parent_asin, 0.0) + 1.0 / (60 + rank)
+        for rank, candidate in enumerate(anchor_result.candidates, start=1):
+            existing = combined.get(candidate.parent_asin, Candidate(candidate.parent_asin))
+            combined[candidate.parent_asin] = replace(
+                existing,
+                constraint_score=max(existing.constraint_score, candidate.constraint_score),
+                source_routes=tuple(
+                    sorted(set(existing.source_routes) | set(candidate.source_routes) | {"category_anchor"})
+                ),
             )
             fusion_scores[candidate.parent_asin] = fusion_scores.get(candidate.parent_asin, 0.0) + 1.0 / (60 + rank)
         for rank, candidate in enumerate(structured_result.candidates, start=1):
