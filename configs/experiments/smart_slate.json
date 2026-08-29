@@ -13,7 +13,10 @@
     "dynamic_constraint_weight": true,
     "constraint_weight_step": 0.08,
     "maximum_constraint_weight": 0.55,
-    "rarity_weighting": true
+    "rarity_weighting": true,
+    "specificity_weighting": true,
+    "specificity_weight_step": 0.12,
+    "all_constraints_bonus": 0.20
   },
   "policy": {
     "implementation": "heuristic",

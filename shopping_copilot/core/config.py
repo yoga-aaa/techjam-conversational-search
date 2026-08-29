@@ -43,6 +43,9 @@ class RankingConfig:
     constraint_weight_step: float
     maximum_constraint_weight: float
     rarity_weighting: bool
+    specificity_weighting: bool
+    specificity_weight_step: float
+    all_constraints_bonus: float
 
 
 @dataclass(frozen=True)
@@ -87,6 +90,12 @@ def load_config(path: str | Path | None = None) -> AppConfig:
                 min(1.0, float(ranking.get("maximum_constraint_weight", 0.55))),
             ),
             rarity_weighting=bool(ranking.get("rarity_weighting", False)),
+            specificity_weighting=bool(ranking.get("specificity_weighting", False)),
+            specificity_weight_step=max(
+                0.0,
+                float(ranking.get("specificity_weight_step", 0.12)),
+            ),
+            all_constraints_bonus=max(0.0, float(ranking.get("all_constraints_bonus", 0.0))),
         ),
         search=SearchConfig(
             implementation=str(search.get("implementation", "hybrid")),

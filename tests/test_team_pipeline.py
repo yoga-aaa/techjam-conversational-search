@@ -390,6 +390,54 @@ class TeamPipelineTest(unittest.TestCase):
                 plan.constraint_weight,
             )
 
+    def test_specific_complete_match_receives_ranking_bonus(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            products = [
+                {
+                    "parent_asin": "A",
+                    "title": "Blue easy-care shirt",
+                    "features": ["machine washable"],
+                    "details": {"color": "blue"},
+                    "categories": ["Clothing", "Shirts"],
+                    "store": "Example",
+                },
+                {
+                    "parent_asin": "B",
+                    "title": "Blue shirt",
+                    "features": ["hand wash only"],
+                    "details": {"color": "blue"},
+                    "categories": ["Clothing", "Shirts"],
+                    "store": "Example",
+                },
+            ]
+            catalog = root / "catalog.jsonl"
+            catalog.write_text(
+                "".join(json.dumps(item) + "\n" for item in products),
+                encoding="utf-8",
+            )
+            components = build_components(
+                catalog,
+                load_config("configs/experiments/smart_slate.json"),
+            )
+            state = components.state_tracker.reset("specific", PROFILE)
+            state.active_slots = {
+                "category": ["shirts"],
+                "color": ["blue"],
+                "feature": ["machine washable"],
+            }
+            plan = components.planner.build(state)
+            result = RetrievalResult(
+                candidates=(Candidate("A", lexical_score=1.0), Candidate("B", lexical_score=1.0)),
+                diagnostics=RetrievalDiagnostics(2, 1, 0.0, plan.route),
+            )
+
+            ranked = components.ranker.rank(state, plan, result)
+
+            self.assertEqual(ranked[0].parent_asin, "A")
+            self.assertEqual(ranked[0].component_scores["all_constraints_match"], 1.0)
+            self.assertEqual(ranked[1].component_scores["all_constraints_match"], 0.0)
+
     def test_pipeline_runs_inside_official_evaluator(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             catalog = self._catalog(Path(directory))
