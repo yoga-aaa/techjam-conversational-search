@@ -51,6 +51,11 @@ class RankingConfig:
     specificity_weighting: bool
     specificity_weight_step: float
     all_constraints_bonus: float
+    exact_base_weight: float
+    exact_token_weight: float
+    exact_unmatched_penalty: float
+    exact_all_match_bonus: float
+    exact_anchor_bonus: float
 
 
 @dataclass(frozen=True)
@@ -101,6 +106,17 @@ def load_config(path: str | Path | None = None) -> AppConfig:
                 float(ranking.get("specificity_weight_step", 0.12)),
             ),
             all_constraints_bonus=max(0.0, float(ranking.get("all_constraints_bonus", 0.0))),
+            exact_base_weight=max(0.0, float(ranking.get("exact_base_weight", 0.8))),
+            exact_token_weight=max(0.0, float(ranking.get("exact_token_weight", 0.55))),
+            exact_unmatched_penalty=max(
+                0.0,
+                float(ranking.get("exact_unmatched_penalty", 0.35)),
+            ),
+            exact_all_match_bonus=max(
+                0.0,
+                float(ranking.get("exact_all_match_bonus", 4.0)),
+            ),
+            exact_anchor_bonus=max(0.0, float(ranking.get("exact_anchor_bonus", 20.0))),
         ),
         search=SearchConfig(
             implementation=str(search.get("implementation", "hybrid")),
@@ -151,7 +167,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
 
     if result.state_implementation != "rule":
         raise ValueError(f"Unsupported state implementation: {result.state_implementation}")
-    if result.ranking.implementation != "heuristic":
+    if result.ranking.implementation not in {"heuristic", "evidence"}:
         raise ValueError(f"Unsupported ranking implementation: {result.ranking.implementation}")
     if result.search.implementation != "hybrid":
         raise ValueError(f"Unsupported search implementation: {result.search.implementation}")

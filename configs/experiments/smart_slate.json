@@ -9,14 +9,19 @@
     "category_anchor_enabled": true
   },
   "ranking": {
-    "implementation": "heuristic",
+    "implementation": "evidence",
     "dynamic_constraint_weight": true,
     "constraint_weight_step": 0.08,
     "maximum_constraint_weight": 0.55,
     "rarity_weighting": true,
     "specificity_weighting": true,
     "specificity_weight_step": 0.12,
-    "all_constraints_bonus": 0.20
+    "all_constraints_bonus": 0.20,
+    "exact_base_weight": 0.8,
+    "exact_token_weight": 0.55,
+    "exact_unmatched_penalty": 0.35,
+    "exact_all_match_bonus": 4.0,
+    "exact_anchor_bonus": 20.0
   },
   "policy": {
     "implementation": "heuristic",
