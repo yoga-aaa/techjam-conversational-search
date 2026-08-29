@@ -6,17 +6,23 @@
     "probe_overload_threshold": 2000,
     "dense_enabled": false,
     "structured_enabled": false,
-    "category_anchor_enabled": true
+    "category_anchor_enabled": true,
+    "category_anchor_full_pool": true
   },
   "ranking": {
-    "implementation": "heuristic",
+    "implementation": "evidence",
     "dynamic_constraint_weight": true,
     "constraint_weight_step": 0.08,
     "maximum_constraint_weight": 0.55,
     "rarity_weighting": true,
     "specificity_weighting": true,
     "specificity_weight_step": 0.12,
-    "all_constraints_bonus": 0.20
+    "all_constraints_bonus": 0.20,
+    "exact_base_weight": 0.8,
+    "exact_token_weight": 0.55,
+    "exact_unmatched_penalty": 0.35,
+    "exact_all_match_bonus": 4.0,
+    "exact_anchor_bonus": 20.0
   },
   "policy": {
     "implementation": "heuristic",
@@ -43,12 +49,13 @@
     "coverage_min_turn": 4,
     "coverage_stagnant_turns": 1,
     "other_first_enabled": true,
-    "other_first_max_questions": 3,
+    "other_first_max_questions": 4,
     "slate_gate_enabled": true,
     "slate_compact_count": 1,
     "slate_expand_min_turn": 3,
     "slate_expand_min_matches": 2,
-    "slate_expand_turn": 4
+    "slate_expand_turn": 4,
+    "global_response_ranking": true
   },
   "trace": {"enabled": false, "path": "artifacts/traces.jsonl"}
 }

@@ -36,7 +36,7 @@ class EvidenceRankerTest(unittest.TestCase):
             )
             components = build_components(
                 catalog,
-                load_config("configs/experiments/smart_slate.json"),
+                load_config("configs/experiments/full_rank.json"),
             )
             state = SessionState(
                 "evidence",
