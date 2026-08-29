@@ -15,11 +15,13 @@ class HybridRetriever:
         dense: Retriever,
         structured: Retriever,
         category_anchor: Retriever,
+        preserve_anchor_pool: bool = False,
     ) -> None:
         self.lexical = lexical
         self.dense = dense
         self.structured = structured
         self.category_anchor = category_anchor
+        self.preserve_anchor_pool = preserve_anchor_pool
 
     def probe(self, plan: SearchPlan) -> RetrievalDiagnostics:
         lexical = self.lexical.probe(plan)
@@ -100,6 +102,8 @@ class HybridRetriever:
                 item.parent_asin,
             ),
             reverse=True,
-        )[: plan.candidate_k]
+        )
+        if not (self.preserve_anchor_pool and anchor_result.candidates):
+            candidates = candidates[: plan.candidate_k]
         diagnostics = self.probe(plan)
         return RetrievalResult(tuple(candidates), diagnostics)

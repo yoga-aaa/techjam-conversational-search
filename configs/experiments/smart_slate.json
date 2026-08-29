@@ -6,7 +6,8 @@
     "probe_overload_threshold": 2000,
     "dense_enabled": false,
     "structured_enabled": false,
-    "category_anchor_enabled": true
+    "category_anchor_enabled": true,
+    "category_anchor_full_pool": true
   },
   "ranking": {
     "implementation": "evidence",
@@ -53,7 +54,8 @@
     "slate_compact_count": 1,
     "slate_expand_min_turn": 3,
     "slate_expand_min_matches": 2,
-    "slate_expand_turn": 4
+    "slate_expand_turn": 4,
+    "global_response_ranking": true
   },
   "trace": {"enabled": false, "path": "artifacts/traces.jsonl"}
 }

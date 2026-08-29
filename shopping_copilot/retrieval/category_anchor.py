@@ -32,8 +32,9 @@ def category_anchor(categories: tuple[str, ...]) -> str:
 class CategoryAnchorRetriever:
     """Restrict broad lexical search to the category named by the user."""
 
-    def __init__(self, store: CatalogStore) -> None:
+    def __init__(self, store: CatalogStore, full_pool: bool = False) -> None:
         self.store = store
+        self.full_pool = full_pool
         self._postings: dict[str, list[str]] = defaultdict(list)
         for product in store.products:
             anchor = category_anchor(product.categories)
@@ -90,7 +91,7 @@ class CategoryAnchorRetriever:
 
     def retrieve(self, plan: SearchPlan) -> RetrievalResult:
         ranked = self._ranked(plan)
-        selected = ranked[: plan.candidate_k]
+        selected = ranked if self.full_pool else ranked[: plan.candidate_k]
         return RetrievalResult(
             candidates=tuple(
                 Candidate(

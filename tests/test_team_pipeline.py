@@ -32,6 +32,12 @@ PROFILE = {
 
 
 class TeamPipelineTest(unittest.TestCase):
+    def test_full_rank_config_preserves_anchor_pool_for_global_ranking(self) -> None:
+        config = load_config("configs/experiments/smart_slate.json")
+
+        self.assertTrue(config.search.category_anchor_full_pool)
+        self.assertTrue(config.policy.global_response_ranking)
+
     def _catalog(self, root: Path) -> Path:
         products = [
             {

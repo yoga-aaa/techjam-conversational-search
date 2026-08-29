@@ -14,6 +14,7 @@ class SearchConfig:
     dense_enabled: bool
     structured_enabled: bool
     category_anchor_enabled: bool
+    category_anchor_full_pool: bool
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class PolicyConfig:
     slate_expand_min_turn: int
     slate_expand_min_matches: int
     slate_expand_turn: int
+    global_response_ranking: bool
 
 
 @dataclass(frozen=True)
@@ -125,6 +127,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             dense_enabled=bool(search.get("dense_enabled", False)),
             structured_enabled=bool(search.get("structured_enabled", False)),
             category_anchor_enabled=bool(search.get("category_anchor_enabled", False)),
+            category_anchor_full_pool=bool(search.get("category_anchor_full_pool", False)),
         ),
         policy=PolicyConfig(
             implementation=str(policy.get("implementation", "heuristic")),
@@ -154,6 +157,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             slate_expand_min_turn=max(1, int(policy.get("slate_expand_min_turn", 3))),
             slate_expand_min_matches=max(1, int(policy.get("slate_expand_min_matches", 2))),
             slate_expand_turn=max(1, int(policy.get("slate_expand_turn", 5))),
+            global_response_ranking=bool(policy.get("global_response_ranking", False)),
         ),
         trace=TraceConfig(
             enabled=bool(trace.get("enabled", False)),

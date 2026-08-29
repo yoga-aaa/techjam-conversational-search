@@ -45,7 +45,7 @@ def build_components(catalog_path: str | Path, config: AppConfig) -> Components:
         else DisabledDenseRetriever()
     )
     category_anchor: Retriever = (
-        CategoryAnchorRetriever(store)
+        CategoryAnchorRetriever(store, full_pool=config.search.category_anchor_full_pool)
         if config.search.category_anchor_enabled
         else DisabledCategoryAnchorRetriever()
     )
@@ -54,6 +54,7 @@ def build_components(catalog_path: str | Path, config: AppConfig) -> Components:
         dense=dense,
         structured=structured,
         category_anchor=category_anchor,
+        preserve_anchor_pool=config.search.category_anchor_full_pool,
     )
     trace_sink: TraceSink = JsonlTraceSink(config.trace.path) if config.trace.enabled else NullTraceSink()
     return Components(
