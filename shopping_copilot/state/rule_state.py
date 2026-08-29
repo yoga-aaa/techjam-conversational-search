@@ -93,6 +93,15 @@ class RuleStateTracker:
         if delta.explicit_reference_override:
             self._remove_supersedable_preference(state)
         apply_operations(state, delta)
+        # Boundary sessions deliberately answer the first question with a
+        # one-off "use your judgment". Treat that as an unanswered attribute,
+        # not as proof that the user has no further requirements at all.
+        if (
+            pending_attribute == "other"
+            and "additional preference" not in user_message.casefold()
+            and "use your judgment" in user_message.casefold()
+        ):
+            state.no_preference_attributes.discard("other")
         state.excluded_terms = {
             value
             for values in state.negative_slots.values()

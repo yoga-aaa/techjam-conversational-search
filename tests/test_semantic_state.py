@@ -11,7 +11,7 @@ from shopping_copilot.state.semantic_delta import OperationKind, apply_operation
 
 
 class SemanticStateTest(unittest.TestCase):
-    def test_same_turn_values_accumulate_without_preserving_previous_turn_value(self) -> None:
+    def test_open_ended_values_preserve_previous_evidence(self) -> None:
         state = SessionState("same-turn", active_slots={"other": ["old value"]})
 
         delta = parse_turn(
@@ -22,7 +22,40 @@ class SemanticStateTest(unittest.TestCase):
         )
         apply_operations(state, delta)
 
-        self.assertEqual(state.active_slots["other"], ["machine washable", "lightweight"])
+        self.assertEqual(
+            state.active_slots["other"],
+            ["old value", "machine washable", "lightweight"],
+        )
+
+    def test_open_ended_evidence_accumulates_across_turns_and_survives_drain(self) -> None:
+        state = SessionState("evidence")
+        first = parse_turn(
+            "For that, what matters is: machine washable; lightweight.",
+            pending_attribute="other",
+            active_slots=state.active_slots,
+            negative_slots=state.negative_slots,
+        )
+        apply_operations(state, first)
+        second = parse_turn(
+            "For that, what matters is: waterproof.",
+            pending_attribute="other",
+            active_slots=state.active_slots,
+            negative_slots=state.negative_slots,
+        )
+        apply_operations(state, second)
+        drained = parse_turn(
+            "I don't have an additional preference for other.",
+            pending_attribute="other",
+            active_slots=state.active_slots,
+            negative_slots=state.negative_slots,
+        )
+        apply_operations(state, drained)
+
+        self.assertEqual(
+            state.active_slots["other"],
+            ["machine washable", "lightweight", "waterproof"],
+        )
+        self.assertIn("other", state.no_preference_attributes)
 
     def setUp(self) -> None:
         self.tracker = RuleStateTracker()

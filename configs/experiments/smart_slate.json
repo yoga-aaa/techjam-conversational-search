@@ -43,7 +43,7 @@
     "coverage_min_turn": 4,
     "coverage_stagnant_turns": 1,
     "other_first_enabled": true,
-    "other_first_max_questions": 3,
+    "other_first_max_questions": 4,
     "slate_gate_enabled": true,
     "slate_compact_count": 1,
     "slate_expand_min_turn": 3,

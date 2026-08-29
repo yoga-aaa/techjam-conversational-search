@@ -224,6 +224,27 @@ class TeamPipelineTest(unittest.TestCase):
             self.assertEqual(second["ask_attribute"], "other")
             self.assertNotEqual(third["ask_attribute"], "other")
 
+    def test_boundary_no_preference_does_not_end_open_requirement_collection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = self._catalog(Path(directory))
+            agent = Agent(catalog, config_path="configs/experiments/smart_slate.json")
+            agent.reset("boundary-other", PROFILE)
+            first = agent.respond(
+                "boundary-other",
+                "I'm looking for Shoes, but I'm still exploring.",
+                1,
+                10,
+            )
+            second = agent.respond(
+                "boundary-other",
+                "I don't have a preference for other; please use your judgment.",
+                2,
+                10,
+            )
+
+            self.assertEqual(first["ask_attribute"], "other")
+            self.assertEqual(second["ask_attribute"], "other")
+
     def test_slate_gate_starts_compact_and_expands_after_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             catalog = self._catalog(Path(directory))

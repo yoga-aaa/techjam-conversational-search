@@ -879,7 +879,12 @@ def apply_operations(state: SessionState, delta: TurnDelta) -> bool:
         if operation.kind is OperationKind.SET:
             if not values:
                 continue
-            if slot in set_slots_seen:
+            if slot == "other" and not delta.explicit_reference_override:
+                state.active_slots[slot] = _unique_state_values(
+                    [*state.active_slots.get(slot, []), *values]
+                )
+                set_slots_seen.add(slot)
+            elif slot in set_slots_seen:
                 state.active_slots[slot] = _unique_state_values(
                     [*state.active_slots.get(slot, []), *values]
                 )
@@ -915,7 +920,10 @@ def apply_operations(state: SessionState, delta: TurnDelta) -> bool:
             if not state.negative_slots.get(slot):
                 state.negative_slots.pop(slot, None)
         elif operation.kind is OperationKind.DONTCARE:
-            state.active_slots.pop(slot, None)
+            # "No additional preference" closes an open-ended question; it
+            # does not cancel evidence disclosed in earlier turns.
+            if slot != "other":
+                state.active_slots.pop(slot, None)
             state.negative_slots.pop(slot, None)
             state.no_preference_attributes.add(slot)
 
