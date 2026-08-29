@@ -5,7 +5,8 @@
     "candidate_k": 100,
     "probe_overload_threshold": 2000,
     "dense_enabled": false,
-    "structured_enabled": false
+    "structured_enabled": false,
+    "strict_rescue_enabled": true
   },
   "ranking": {
     "implementation": "heuristic",
@@ -41,7 +42,8 @@
     "coverage_stagnant_turns": 1,
     "adaptive_semantic_slate": true,
     "adaptive_semantic_slate_mode": "exact",
-    "adaptive_semantic_slate_anchor": "strongest_semantic_tier"
+    "adaptive_semantic_slate_anchor": "strongest_semantic_tier",
+    "full_rerank_clarification_response": true
   },
   "trace": {"enabled": false, "path": "artifacts/traces.jsonl"}
 }

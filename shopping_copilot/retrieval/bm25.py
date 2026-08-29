@@ -10,8 +10,13 @@ from shopping_copilot.core.contracts import Candidate, RetrievalDiagnostics, Ret
 class BM25Retriever:
     """Fast offline candidate search based on the official SQLite FTS5 baseline."""
 
-    def __init__(self, store: CatalogStore) -> None:
+    def __init__(
+        self,
+        store: CatalogStore,
+        strict_rescue_enabled: bool = False,
+    ) -> None:
         self.store = store
+        self.strict_rescue_enabled = strict_rescue_enabled
         self.connection = sqlite3.connect(":memory:")
         self._category_frequency_cache: dict[str, int] = {}
         self._build_index()
@@ -213,6 +218,10 @@ class BM25Retriever:
             return RetrievalResult((), diagnostics)
 
         broad = self._retrieve_expression(plan, expression, plan.candidate_k, "bm25")
+        diagnostics = self.probe(plan)
+        if not self.strict_rescue_enabled:
+            return RetrievalResult(broad, diagnostics)
+
         broad_ids = {candidate.parent_asin for candidate in broad}
         strict = self.strict_candidates(plan, 60)
         rescue: list[Candidate] = []
@@ -227,5 +236,4 @@ class BM25Retriever:
             if len(rescue) >= 10:
                 break
         candidates = (*broad, *rescue)
-        diagnostics = self.probe(plan)
         return RetrievalResult(candidates, diagnostics)

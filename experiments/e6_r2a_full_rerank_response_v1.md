@@ -5,7 +5,7 @@
 - Base experiment: `E6-R1@ce9e815`
 - Experiment implementation: `0543b1f`
 - Branch: `codex/e6-r2a-full-rerank-response`
-- Config: `configs/final.json`
+- Config: `configs/experiments/e6_r2a_full_rerank_response.json`
 - Tests: 45 passed
 - Result: `/private/tmp/E6_R2a_FullRerankResponse_Public200.json`
 

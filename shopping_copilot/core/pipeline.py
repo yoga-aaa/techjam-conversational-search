@@ -85,6 +85,23 @@ class ShoppingCopilotAgent:
         )
 
         response_ranked = ranked
+        if (
+            early_decision is not None
+            and self.config.policy.question_strategy == "information_gain"
+            and not self.config.policy.full_rerank_clarification_response
+        ):
+            response_candidate_count = max(10, decision.recommendation_count)
+            response_result = replace(
+                result,
+                candidates=result.candidates[:response_candidate_count],
+            )
+            response_plan = replace(search_plan, candidate_k=response_candidate_count)
+            response_ranked = self.components.ranker.rank(
+                state,
+                response_plan,
+                response_result,
+            )
+
         if state.coverage_mode:
             response_ranked = self.components.coverage_manager.order_for_response(state, ranked)
             if (

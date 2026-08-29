@@ -40,8 +40,8 @@
     "coverage_overlap_threshold": 0.90,
     "coverage_min_turn": 4,
     "coverage_stagnant_turns": 1,
-    "adaptive_semantic_slate": true,
-    "full_rerank_clarification_response": true
+    "adaptive_semantic_slate": false,
+    "full_rerank_clarification_response": false
   },
   "trace": {"enabled": false, "path": "artifacts/traces.jsonl"}
 }

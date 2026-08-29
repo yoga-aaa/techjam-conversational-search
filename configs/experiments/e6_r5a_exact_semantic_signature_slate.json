@@ -5,7 +5,8 @@
     "candidate_k": 100,
     "probe_overload_threshold": 2000,
     "dense_enabled": false,
-    "structured_enabled": false
+    "structured_enabled": false,
+    "strict_rescue_enabled": true
   },
   "ranking": {
     "implementation": "heuristic",
@@ -13,7 +14,7 @@
     "constraint_weight_step": 0.08,
     "maximum_constraint_weight": 0.55,
     "rarity_weighting": true,
-    "global_idf_semantic_priority": false
+    "semantic_priority_mode": "legacy"
   },
   "policy": {
     "implementation": "heuristic",
@@ -40,7 +41,8 @@
     "coverage_min_turn": 4,
     "coverage_stagnant_turns": 1,
     "adaptive_semantic_slate": true,
-    "adaptive_semantic_slate_mode": "exact"
+    "adaptive_semantic_slate_mode": "exact",
+    "full_rerank_clarification_response": true
   },
   "trace": {"enabled": false, "path": "artifacts/traces.jsonl"}
 }

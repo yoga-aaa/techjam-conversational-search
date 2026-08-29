@@ -5,7 +5,7 @@
 - Base: `origin/dev@3672d1b`
 - Experiment implementation: `6e2060b`
 - Branch: `codex/e6-r1-broad-or60-strict-and-rescue10`
-- Config: `configs/final.json`
+- Config: `configs/experiments/e6_r1_strict_rescue.json`
 - Tests: 44 passed
 
 No RRF score is used.  The original Broad OR pool is preserved and Strict AND

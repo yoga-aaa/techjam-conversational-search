@@ -13,6 +13,7 @@ class SearchConfig:
     probe_overload_threshold: int
     dense_enabled: bool
     structured_enabled: bool
+    strict_rescue_enabled: bool
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,7 @@ class PolicyConfig:
     adaptive_semantic_slate: bool
     adaptive_semantic_slate_mode: str
     adaptive_semantic_slate_anchor: str
+    full_rerank_clarification_response: bool
 
 
 @dataclass(frozen=True)
@@ -103,6 +105,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             probe_overload_threshold=max(10, int(search.get("probe_overload_threshold", 2000))),
             dense_enabled=bool(search.get("dense_enabled", False)),
             structured_enabled=bool(search.get("structured_enabled", False)),
+            strict_rescue_enabled=bool(search.get("strict_rescue_enabled", False)),
         ),
         policy=PolicyConfig(
             implementation=str(policy.get("implementation", "heuristic")),
@@ -131,6 +134,9 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             ),
             adaptive_semantic_slate_anchor=str(
                 policy.get("adaptive_semantic_slate_anchor", "rank_one")
+            ),
+            full_rerank_clarification_response=bool(
+                policy.get("full_rerank_clarification_response", False)
             ),
         ),
         trace=TraceConfig(

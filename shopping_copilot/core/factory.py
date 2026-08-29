@@ -35,7 +35,10 @@ def build_components(catalog_path: str | Path, config: AppConfig) -> Components:
     """Builds config-selected implementations while keeping the pipeline fixed."""
 
     store = CatalogStore(catalog_path)
-    lexical = BM25Retriever(store)
+    lexical = BM25Retriever(
+        store,
+        strict_rescue_enabled=config.search.strict_rescue_enabled,
+    )
     dense = DisabledDenseRetriever()
     structured: Retriever = (
         StructuredRetriever(store)
