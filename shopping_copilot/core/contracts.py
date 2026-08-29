@@ -21,6 +21,15 @@ class Product:
     searchable_text: str
 
 
+@dataclass(frozen=True)
+class SupersedablePreference:
+    """One small, explicitly replaceable preference reference."""
+
+    source_turn: int
+    raw_text: str
+    parsed_values: tuple[tuple[str, str], ...] = ()
+
+
 @dataclass
 class SessionState:
     """Mutable, per-session understanding of the current shopping intent."""
@@ -44,6 +53,7 @@ class SessionState:
     candidate_overlap: float = 0.0
     stagnant_candidate_turns: int = 0
     coverage_mode: bool = False
+    supersedable_preference: SupersedablePreference | None = None
 
 
 @dataclass(frozen=True)

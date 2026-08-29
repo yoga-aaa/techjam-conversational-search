@@ -15,6 +15,7 @@ from shopping_copilot.core.contracts import (
     SessionState,
 )
 from shopping_copilot.core.factory import build_components
+from shopping_copilot.policy.heuristic import HeuristicPolicy
 from shopping_copilot.policy.information_gain import InformationGainQuestionScorer
 from shopping_copilot.state.rule_state import RuleStateTracker
 from starter.agent import Agent
@@ -60,6 +61,27 @@ class TeamPipelineTest(unittest.TestCase):
         path = root / "catalog.jsonl"
         path.write_text("".join(json.dumps(item) + "\n" for item in products), encoding="utf-8")
         return path
+
+    def test_fixed_questioning_uses_broad_fallback_after_two_no_preference_answers(self) -> None:
+        state = SessionState(session_id="fallback")
+        state.asked_attributes.extend(["feature", "budget", "size"])
+        state.no_preference_attributes.update({"budget", "size"})
+
+        self.assertEqual(HeuristicPolicy._select_fixed_attribute(state, "buying"), "other")
+
+    def test_fixed_questioning_does_not_fallback_after_one_no_preference_answer(self) -> None:
+        state = SessionState(session_id="fallback")
+        state.asked_attributes.extend(["feature", "budget"])
+        state.no_preference_attributes.add("budget")
+
+        self.assertEqual(HeuristicPolicy._select_fixed_attribute(state, "buying"), "material")
+
+    def test_fixed_buying_questions_prioritize_color_before_budget(self) -> None:
+        state = SessionState(session_id="color-priority")
+        state.active_slots.update({"category": ["shoes"], "material": ["leather"]})
+        state.asked_attributes.extend(["feature", "material"])
+
+        self.assertEqual(HeuristicPolicy._select_fixed_attribute(state, "buying"), "color")
 
     def test_official_entry_returns_contract_shape(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

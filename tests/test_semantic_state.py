@@ -7,7 +7,7 @@ from shopping_copilot.core.contracts import RankedCandidate
 from shopping_copilot.planning.query_planner import RuleQueryPlanner
 from shopping_copilot.policy.coverage import CandidateCoverageManager
 from shopping_copilot.state.rule_state import RuleStateTracker
-from shopping_copilot.state.semantic_delta import OperationKind, parse_turn
+from shopping_copilot.state.semantic_delta import OperationKind, parse_price_value, parse_turn
 
 
 class SemanticStateTest(unittest.TestCase):
@@ -204,6 +204,40 @@ class SemanticStateTest(unittest.TestCase):
         self.assertIn("shoes", plan.lexical_terms)
         self.assertNotIn("leather", plan.lexical_terms)
         self.assertNotIn("leather", plan.semantic_query.split())
+
+    def test_official_reference_override_removes_old_value_and_ignores_pending(self) -> None:
+        tracker = RuleStateTracker()
+        tracker.reset("official-override", {})
+        tracker.update("official-override", "I'm looking for shirts with waterproof feature.", 1)
+        tracker.mark_asked("official-override", "budget")
+
+        state = tracker.update(
+            "official-override",
+            "Actually, ignore my earlier preference. What I need is: cotton.",
+            2,
+        )
+
+        self.assertEqual(state.active_slots["material"], ["cotton"])
+        self.assertNotIn("waterproof", state.active_slots.get("feature", []))
+        self.assertNotIn("budget", state.active_slots)
+        self.assertNotIn("ignore my earlier preference", " ".join(state.active_context))
+        self.assertIn("waterproof", " ".join(state.active_context))
+
+    def test_non_price_pending_answer_is_not_budget(self) -> None:
+        tracker = RuleStateTracker()
+        tracker.reset("budget-guard", {})
+        tracker.mark_asked("budget-guard", "budget")
+
+        state = tracker.update("budget-guard", "cotton", 1)
+
+        self.assertNotIn("budget", state.active_slots)
+        self.assertEqual(state.active_slots["material"], ["cotton"])
+
+    def test_budget_accepts_deterministic_text_number(self) -> None:
+        self.assertEqual(parse_price_value("eighty", pending_is_budget=True), "80")
+        self.assertEqual(parse_price_value("one hundred and twenty", pending_is_budget=True), "120")
+        self.assertEqual(parse_price_value("under eighty dollars"), "80")
+        self.assertIsNone(parse_price_value("cotton", pending_is_budget=True))
 
     def test_coverage_signature_encodes_positive_negative_and_no_preference(self) -> None:
         state = self.update("I want white.")

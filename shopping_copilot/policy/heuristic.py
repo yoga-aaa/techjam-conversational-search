@@ -157,14 +157,21 @@ class HeuristicPolicy:
 
     @staticmethod
     def _select_fixed_attribute(state: SessionState, route: str) -> str | None:
-        if route == "browsing":
-            priority = ("use_case", "feature", "material", "budget", "style", "color", "size", "other")
-        else:
-            priority = ("feature", "material", "budget", "size", "color", "style", "use_case", "other")
-
         unavailable = (
             set(state.active_slots)
             | set(state.asked_attributes)
             | set(state.no_preference_attributes)
         )
+        # Repeated "no preference" answers are evidence that continuing the
+        # fixed attribute checklist is unlikely to add useful constraints.
+        # Ask one broad fallback question instead so the user can disclose a
+        # requirement whose wording does not fit our small slot taxonomy.
+        if len(state.no_preference_attributes) >= 2 and "other" not in unavailable:
+            return "other"
+
+        if route == "browsing":
+            priority = ("use_case", "feature", "material", "budget", "style", "color", "size", "other")
+        else:
+            priority = ("feature", "material", "color", "budget", "size", "style", "use_case", "other")
+
         return next((attribute for attribute in priority if attribute not in unavailable), None)

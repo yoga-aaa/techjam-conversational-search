@@ -27,6 +27,7 @@ class SlotOperation:
 class TurnDelta:
     operations: tuple[SlotOperation, ...] = ()
     positive_context: tuple[str, ...] = ()
+    explicit_reference_override: bool = False
 
 
 MATERIALS = (
@@ -79,6 +80,28 @@ _CONTROL_TOKENS = {
     "longer", "drop", "remove", "forget", "avoid", "exclude", "without", "anything",
     "please", "additional", "judgment", "your", "necessarily", "too",
 }
+
+_NUMBER_UNITS = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4,
+    "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+    "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13,
+    "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
+    "eighteen": 18, "nineteen": 19,
+}
+_NUMBER_TENS = {
+    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+    "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+}
+_NUMBER_WORDS = set(_NUMBER_UNITS) | set(_NUMBER_TENS) | {"hundred", "thousand", "and", "a"}
+
+_EXPLICIT_OVERRIDE_CUE = re.compile(
+    r"\bignore\s+my\s+earlier\s+preference\b",
+    re.IGNORECASE,
+)
+_EXPLICIT_OVERRIDE_PAYLOAD = re.compile(
+    r"\bwhat\s+(?:i\s+)?need\s+is\s*:?\s*(?P<payload>.+?)\s*[.!?]?\s*$",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def _canonical_slot(slot: str | None) -> str | None:
@@ -203,6 +226,100 @@ def _split_values(value: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(cleaned))
 
 
+def _parse_number_words(tokens: tuple[str, ...]) -> float | None:
+    """Parse a bounded English cardinal number without guessing."""
+
+    if not tokens or any(token not in _NUMBER_WORDS for token in tokens):
+        return None
+    total = 0
+    current = 0
+    seen_number = False
+    for token in tokens:
+        if token in {"and", "a"}:
+            continue
+        if token in _NUMBER_UNITS:
+            current += _NUMBER_UNITS[token]
+            seen_number = True
+        elif token in _NUMBER_TENS:
+            current += _NUMBER_TENS[token]
+            seen_number = True
+        elif token == "hundred":
+            if current == 0:
+                current = 1
+            current *= 100
+            seen_number = True
+        elif token == "thousand":
+            if current == 0:
+                current = 1
+            total += current * 1000
+            current = 0
+            seen_number = True
+    if not seen_number:
+        return None
+    value = total + current
+    return float(value) if value >= 0 else None
+
+
+def _format_price(value: float) -> str:
+    return str(int(value)) if value.is_integer() else str(value)
+
+
+def parse_price_value(
+    text: str,
+    *,
+    pending_is_budget: bool = False,
+) -> str | None:
+    """Return a canonical price only for an unambiguous price expression."""
+
+    lowered = text.casefold()
+    has_price_cue = bool(re.search(
+        r"\b(?:under|below|less\s+than|at\s+most|max(?:imum)?|budget|price)\b|"
+        r"[$€£]|\b(?:dollars?|bucks?)\b",
+        lowered,
+    ))
+    if not (pending_is_budget or has_price_cue):
+        return None
+
+    numeric = re.search(r"(?<![\w.])\d+(?:\.\d+)?(?![\w.])", lowered)
+    if numeric:
+        return _format_price(float(numeric.group(0)))
+
+    tokens = normalized_tokens(lowered)
+    number_tokens = tuple(token for token in tokens if token in _NUMBER_WORDS)
+    if number_tokens and len(number_tokens) == len(tokens):
+        parsed = _parse_number_words(number_tokens)
+        if parsed is not None:
+            return _format_price(parsed)
+
+    # Price cues may surround the number words. Keep only the bounded number
+    # span and reject unrelated prose instead of guessing a budget.
+    spans: list[list[str]] = []
+    current: list[str] = []
+    for token in tokens:
+        if token in _NUMBER_WORDS:
+            current.append(token)
+        elif current:
+            spans.append(current)
+            current = []
+    if current:
+        spans.append(current)
+    if len(spans) == 1:
+        parsed = _parse_number_words(tuple(spans[0]))
+        if parsed is not None:
+            return _format_price(parsed)
+    return None
+
+
+def _explicit_override_payload(text: str) -> str | None:
+    if not _EXPLICIT_OVERRIDE_CUE.search(text):
+        return None
+    match = _EXPLICIT_OVERRIDE_PAYLOAD.search(text)
+    if not match:
+        return None
+    payload = match.group("payload").strip(" .;!?\t\r\n")
+    return payload or None
+
+
 def _seed_slot(value: str) -> str | None:
     tokens = set(normalized_tokens(value))
     if tokens & set(MATERIALS):
@@ -302,6 +419,28 @@ def _typed_values(
         raw = re.split(r"\bwith\s+", raw, maxsplit=1, flags=re.IGNORECASE)[-1]
     if explicit_slot:
         raw = re.sub(rf"^\s*{_SLOT_LABEL}\s*[:=-]?\s*", "", raw, count=1, flags=re.IGNORECASE)
+
+    canonical_pending = _canonical_slot(pending_attribute)
+    canonical_explicit = _canonical_slot(explicit_slot)
+    price = parse_price_value(
+        raw,
+        pending_is_budget=canonical_pending == "budget" or canonical_explicit == "budget",
+    )
+    if price is not None and (canonical_pending == "budget" or canonical_explicit == "budget" or re.search(
+        r"\b(?:under|below|less\s+than|at\s+most|max(?:imum)?|budget|price)\b|[$€£]|\b(?:dollars?|bucks?)\b",
+        clause,
+        re.IGNORECASE,
+    )):
+        return (("budget", (price,)),)
+
+    # A non-price answer must not be stored as budget. Let stable semantic
+    # seeds classify it when possible; otherwise the caller can use the
+    # explicit clause cue (feature/other) instead of inheriting budget.
+    effective_pending = pending_attribute
+    if canonical_pending == "budget":
+        effective_pending = None
+        if not _seed_slot(raw) and not _POSITIVE_CUE_RE.search(clause):
+            return ()
     value, _ = _value_with_context(raw, explicit_slot, pending_attribute)
     parts = _split_values(value)
     grouped: dict[str, list[str]] = {}
@@ -313,7 +452,7 @@ def _typed_values(
         slot = _infer_slot(
             cleaned,
             clause,
-            pending_attribute,
+            effective_pending,
             active_slots,
             negative_slots,
             explicit_slot,
@@ -523,12 +662,14 @@ def _parse_implicit_clause(
             operations.append(SlotOperation(OperationKind.SET, "category", (category,)))
 
     budget_match = re.search(
-        r"\b(?:under|below|less\s+than|max(?:imum)?|budget(?:\s+around)?|at\s+most)\s*\$?\s*(\d+(?:\.\d+)?)",
+        r"\b(?:under|below|less\s+than|max(?:imum)?|budget(?:\s+around)?|at\s+most)\b",
         clause,
         re.IGNORECASE,
     )
     if budget_match:
-        operations.append(SlotOperation(OperationKind.SET, "budget", (budget_match.group(1),)))
+        budget = parse_price_value(clause[budget_match.start():], pending_is_budget=True)
+        if budget is not None:
+            operations.append(SlotOperation(OperationKind.SET, "budget", (budget,)))
 
     size_match = re.search(r"\bsize\s+([a-z0-9.-]+)", clause, re.IGNORECASE)
     if size_match:
@@ -565,14 +706,21 @@ def _parse_implicit_clause(
     # A short answer to a question is an open value span, including OOV values.
     plain = _clean_value(clause)
     plain_tokens = normalized_tokens(clause)
+    pending_budget = _canonical_slot(pending_attribute) == "budget"
     if (
         not operations
         and _canonical_slot(pending_attribute)
         and plain
         and len(plain_tokens) <= 8
+        and not pending_budget
         and not re.search(r"\b(?:i|we|you)\b|\b(?:not|sure|looking|exploring)\b", clause, re.IGNORECASE)
     ):
         operations.append(SlotOperation(OperationKind.SET, _canonical_slot(pending_attribute) or "other", _split_values(plain)))
+
+    if not operations and pending_budget:
+        budget = parse_price_value(clause, pending_is_budget=True)
+        if budget is not None:
+            operations.append(SlotOperation(OperationKind.SET, "budget", (budget,)))
 
     # Stable seed values preserve the pre-existing lightweight parser behavior.
     known = (
@@ -605,6 +753,23 @@ def parse_turn(
 ) -> TurnDelta:
     """Parse one turn into ordered, deterministic state operations."""
 
+    override_payload = _explicit_override_payload(user_message)
+    if override_payload is not None:
+        # Parse only the payload. The control prefix is a state instruction,
+        # not an open value, and the payload must not inherit pending.
+        payload_clause = f"What I need is: {override_payload}"
+        payload_delta = parse_turn(
+            user_message=payload_clause,
+            pending_attribute=None,
+            active_slots=active_slots,
+            negative_slots=negative_slots,
+        )
+        return TurnDelta(
+            operations=payload_delta.operations,
+            positive_context=payload_delta.positive_context,
+            explicit_reference_override=True,
+        )
+
     operations: list[SlotOperation] = []
     positive_context: list[str] = []
     for clause in _split_clauses(user_message.casefold()):
@@ -617,6 +782,46 @@ def parse_turn(
         operations.extend(clause_operations)
         positive_context.extend(clause_context)
     return TurnDelta(tuple(operations), tuple(dict.fromkeys(item for item in positive_context if item)))
+
+
+def extract_supersedable_preference(
+    user_message: str,
+) -> tuple[str, tuple[tuple[str, str], ...]] | None:
+    """Extract one initial soft-preference reference without fuzzy matching."""
+
+    lowered = user_message.casefold()
+    if "key requirement" in lowered or "still exploring" in lowered:
+        return None
+    clauses = _split_clauses(user_message)
+    if not clauses:
+        return None
+
+    raw_parts: list[str] = []
+    for clause in clauses:
+        if re.search(r"\b(?:looking|shopping)\s+for\b", clause, re.IGNORECASE):
+            with_match = re.search(r"\bwith\s+(.+)$", clause, re.IGNORECASE)
+            if with_match:
+                raw_parts.append(with_match.group(1))
+            continue
+        if _explicit_override_payload(clause) is None:
+            raw_parts.append(clause)
+    raw_text = ". ".join(part.strip(" .;,") for part in raw_parts if part.strip(" .;,"))
+    if not raw_text:
+        return None
+
+    delta = parse_turn(
+        user_message=raw_text,
+        pending_attribute=None,
+        active_slots={},
+        negative_slots={},
+    )
+    values = tuple(
+        (operation.slot, value)
+        for operation in delta.operations
+        if operation.kind is OperationKind.SET and operation.slot != "category"
+        for value in operation.values
+    )
+    return raw_text, values
 
 
 def _slot_map_signature(slots: dict[str, list[str]]) -> tuple[tuple[str, tuple[str, ...]], ...]:

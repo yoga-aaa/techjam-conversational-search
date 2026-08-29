@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from shopping_copilot.catalog.constraints import normalized_tokens, normalized_value
-from shopping_copilot.core.contracts import SessionState
+from shopping_copilot.core.contracts import SessionState, SupersedablePreference
 from shopping_copilot.state.semantic_delta import (
     MATERIALS,
     COLORS,
@@ -10,6 +10,7 @@ from shopping_copilot.state.semantic_delta import (
     STYLES,
     OperationKind,
     TurnDelta,
+    extract_supersedable_preference,
     apply_operations,
     parse_turn,
     sanitize_positive_context,
@@ -79,6 +80,17 @@ class RuleStateTracker:
             active_slots=state.active_slots,
             negative_slots=state.negative_slots,
         )
+        if turn == 1 and not delta.explicit_reference_override:
+            extracted = extract_supersedable_preference(user_message)
+            if extracted is not None:
+                raw_text, parsed_values = extracted
+                state.supersedable_preference = SupersedablePreference(
+                    source_turn=turn,
+                    raw_text=raw_text,
+                    parsed_values=parsed_values,
+                )
+        if delta.explicit_reference_override:
+            self._remove_supersedable_preference(state)
         apply_operations(state, delta)
         state.excluded_terms = {
             value
@@ -102,6 +114,45 @@ class RuleStateTracker:
         state.messages.append(user_message)
         state.intent_mode = self._infer_intent(state, user_message.casefold())
         return state
+
+    @staticmethod
+    def _remove_supersedable_preference(state: SessionState) -> None:
+        reference = state.supersedable_preference
+        if reference is None:
+            return
+        soft_values = [value for _, value in reference.parsed_values if value]
+        removals = {
+            normalized_value(value)
+            for _, value in reference.parsed_values
+            if normalized_value(value)
+        }
+        if removals:
+            for slot in list(state.active_slots):
+                state.active_slots[slot] = [
+                    value
+                    for value in state.active_slots[slot]
+                    if normalized_value(value) not in removals
+                ]
+                if not state.active_slots[slot]:
+                    state.active_slots.pop(slot)
+        context_removals = removals | {
+            normalized_value(reference.raw_text)
+        }
+        state.active_context = [
+            cleaned
+            for cleaned in state.active_context
+            if normalized_value(cleaned) not in context_removals
+        ]
+        # An explicit override removes the old preference as a hard/structured
+        # constraint, but keeps it as a weak lexical signal. The public
+        # simulator derives both values from the target product, so deleting
+        # the only trace can hurt early ranking even when the old preference
+        # should no longer constrain the result.
+        for value in [*soft_values, reference.raw_text]:
+            cleaned = sanitize_positive_context(value)
+            if cleaned and cleaned not in state.active_context:
+                state.active_context.append(cleaned)
+        state.supersedable_preference = None
 
     @staticmethod
     def _preference_signature(state: SessionState) -> tuple[object, ...]:
