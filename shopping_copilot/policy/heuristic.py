@@ -63,7 +63,7 @@ class HeuristicPolicy:
         if not over_general:
             return None
 
-        attribute = self._select_fixed_attribute(state, plan.route)
+        attribute = self._select_other_first(state) or self._select_fixed_attribute(state, plan.route)
         if attribute is None:
             return None
         return PolicyDecision(
@@ -96,6 +96,16 @@ class HeuristicPolicy:
                 recommendation_count=early_decision.recommendation_count,
             )
 
+        other_first = self._select_other_first(state)
+        if other_first is not None:
+            state.question_scores = {"other": 1.0}
+            return PolicyDecision(
+                should_ask=True,
+                ask_attribute=other_first,
+                message=QUESTION_TEMPLATES[other_first],
+                recommendation_count=self.policy_config.uncertain_recommendation_count,
+            )
+
         if len(ranked) >= 2:
             score_gap = ranked[0].final_score - ranked[1].final_score
         elif ranked:
@@ -124,6 +134,10 @@ class HeuristicPolicy:
         route: str,
         ranked: Sequence[RankedCandidate],
     ) -> str | None:
+        other_first = self._select_other_first(state)
+        if other_first is not None:
+            state.question_scores = {"other": 1.0}
+            return other_first
         explicit_exploration = any(
             marker in message.lower()
             for message in state.messages
@@ -154,6 +168,16 @@ class HeuristicPolicy:
         else:
             state.question_scores = {}
         return self._select_fixed_attribute(state, route)
+
+    def _select_other_first(self, state: SessionState) -> str | None:
+        if not self.policy_config.other_first_enabled:
+            return None
+        if "other" in state.no_preference_attributes:
+            return None
+        asked = state.asked_attribute_counts.get("other", 0)
+        if asked >= self.policy_config.other_first_max_questions:
+            return None
+        return "other"
 
     @staticmethod
     def _select_fixed_attribute(state: SessionState, route: str) -> str | None:

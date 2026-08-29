@@ -194,6 +194,35 @@ class TeamPipelineTest(unittest.TestCase):
             response = agent.respond("s3", "I'm looking for shoes, but I'm still exploring.", 1, 10)
             self.assertEqual(response["ask_attribute"], "use_case")
 
+    def test_other_first_policy_can_repeat_until_requirements_are_drained(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = self._catalog(Path(directory))
+            agent = Agent(catalog, config_path="configs/experiments/smart_slate.json")
+            agent.reset("other-first", PROFILE)
+
+            first = agent.respond(
+                "other-first",
+                "I'm looking for Shoes, but I'm still exploring.",
+                1,
+                10,
+            )
+            second = agent.respond(
+                "other-first",
+                "For that, what matters is: waterproof; synthetic.",
+                2,
+                10,
+            )
+            third = agent.respond(
+                "other-first",
+                "I don't have an additional preference for other.",
+                3,
+                10,
+            )
+
+            self.assertEqual(first["ask_attribute"], "other")
+            self.assertEqual(second["ask_attribute"], "other")
+            self.assertNotEqual(third["ask_attribute"], "other")
+
     def test_information_gain_prefers_attribute_that_splits_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

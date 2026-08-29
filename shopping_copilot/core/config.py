@@ -32,6 +32,8 @@ class PolicyConfig:
     coverage_overlap_threshold: float
     coverage_min_turn: int
     coverage_stagnant_turns: int
+    other_first_enabled: bool
+    other_first_max_questions: int
 
 
 @dataclass(frozen=True)
@@ -115,6 +117,8 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             ),
             coverage_min_turn=max(1, int(policy.get("coverage_min_turn", 2))),
             coverage_stagnant_turns=max(1, int(policy.get("coverage_stagnant_turns", 1))),
+            other_first_enabled=bool(policy.get("other_first_enabled", False)),
+            other_first_max_questions=max(1, int(policy.get("other_first_max_questions", 3))),
         ),
         trace=TraceConfig(
             enabled=bool(trace.get("enabled", False)),

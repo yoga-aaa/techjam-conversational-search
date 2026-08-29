@@ -38,7 +38,9 @@
     "coverage_candidate_limit": 60,
     "coverage_overlap_threshold": 0.90,
     "coverage_min_turn": 4,
-    "coverage_stagnant_turns": 1
+    "coverage_stagnant_turns": 1,
+    "other_first_enabled": true,
+    "other_first_max_questions": 3
   },
   "trace": {"enabled": false, "path": "artifacts/traces.jsonl"}
 }

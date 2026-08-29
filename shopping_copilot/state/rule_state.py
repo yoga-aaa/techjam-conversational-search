@@ -61,6 +61,7 @@ class RuleStateTracker:
         state.pending_attribute = attribute
         if not attribute:
             return
+        state.asked_attribute_counts[attribute] = state.asked_attribute_counts.get(attribute, 0) + 1
         if attribute not in state.asked_attributes:
             state.asked_attributes.append(attribute)
 
