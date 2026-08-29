@@ -7,7 +7,10 @@
     "dense_enabled": false,
     "structured_enabled": false,
     "strict_rescue_enabled": false,
-    "protected_rescue_enabled": false
+    "protected_rescue_enabled": true,
+    "protected_rescue_fetch_k": 60,
+    "protected_rescue_pool_size": 10,
+    "protected_rescue_min_slot_matches": 2
   },
   "ranking": {
     "implementation": "heuristic",
@@ -42,7 +45,10 @@
     "coverage_min_turn": 4,
     "coverage_stagnant_turns": 1,
     "adaptive_semantic_slate": false,
-    "full_rerank_clarification_response": false
+    "full_rerank_clarification_response": false,
+    "protected_rescue_head_size": 7,
+    "protected_rescue_quota": 3,
+    "protected_rescue_rank_limit": 10
   },
   "trace": {"enabled": false, "path": "artifacts/traces.jsonl"}
 }

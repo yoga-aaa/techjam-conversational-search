@@ -128,13 +128,20 @@ class BM25Retriever:
         expression: str,
         limit: int,
         source_route: str,
+        *,
+        deterministic_ties: bool = False,
     ) -> tuple[Candidate, ...]:
         if not expression or limit <= 0:
             return ()
-        fetch_limit = max(limit, limit * 4)
+        requires_filter_headroom = (
+            plan.hard_filters.get("price_max") is not None
+            or bool(plan.excluded_terms)
+        )
+        fetch_limit = max(limit, limit * 4) if requires_filter_headroom else limit
+        order_by = "ORDER BY 2, parent_asin" if deterministic_ties else "ORDER BY 2"
         rows = self.connection.execute(
             "SELECT parent_asin, bm25(products, 0.0, 6.0, 4.0, 2.5, 2.5, 1.5, 1.0) "
-            "FROM products WHERE products MATCH ? ORDER BY 2 LIMIT ?",
+            f"FROM products WHERE products MATCH ? {order_by} LIMIT ?",
             (expression, fetch_limit),
         ).fetchall()
 
@@ -164,7 +171,13 @@ class BM25Retriever:
 
         return self._retrieve_expression(plan, self._expression(plan), limit, "bm25")
 
-    def strict_candidates(self, plan: SearchPlan, limit: int) -> tuple[Candidate, ...]:
+    def strict_candidates(
+        self,
+        plan: SearchPlan,
+        limit: int,
+        *,
+        deterministic_ties: bool = False,
+    ) -> tuple[Candidate, ...]:
         """Return slot-level Strict AND candidates without changing live retrieval."""
 
         return self._retrieve_expression(
@@ -172,18 +185,34 @@ class BM25Retriever:
             self._strict_expression(plan),
             limit,
             "bm25:strict_and",
+            deterministic_ties=deterministic_ties,
         )
 
     def _broad_score(self, plan: SearchPlan, parent_asin: str) -> float:
+        return self.broad_scores_for_ids(plan, (parent_asin,)).get(parent_asin, 0.0)
+
+    def broad_scores_for_ids(
+        self,
+        plan: SearchPlan,
+        parent_asins: tuple[str, ...],
+    ) -> dict[str, float]:
+        """Return Broad BM25 scores for known IDs using one bound query."""
+
         expression = self._expression(plan)
-        if not expression:
-            return 0.0
-        row = self.connection.execute(
-            "SELECT bm25(products, 0.0, 6.0, 4.0, 2.5, 2.5, 1.5, 1.0) "
-            "FROM products WHERE products MATCH ? AND parent_asin = ? LIMIT 1",
-            (expression, parent_asin),
-        ).fetchone()
-        return max(0.0, -float(row[0])) if row is not None else 0.0
+        if not parent_asins or not expression:
+            return {}
+        unique_ids = tuple(sorted(set(parent_asins)))
+        placeholders = ", ".join("?" for _ in unique_ids)
+        rows = self.connection.execute(
+            "SELECT parent_asin, "
+            "bm25(products, 0.0, 6.0, 4.0, 2.5, 2.5, 1.5, 1.0) "
+            f"FROM products WHERE products MATCH ? AND parent_asin IN ({placeholders})",
+            (expression, *unique_ids),
+        ).fetchall()
+        return {
+            str(parent_asin): max(0.0, -float(raw_score))
+            for parent_asin, raw_score in rows
+        }
 
     def probe(self, plan: SearchPlan) -> RetrievalDiagnostics:
         expression = self._expression(plan)

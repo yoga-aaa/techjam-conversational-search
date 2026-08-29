@@ -14,6 +14,10 @@ class SearchConfig:
     dense_enabled: bool
     structured_enabled: bool
     strict_rescue_enabled: bool
+    protected_rescue_enabled: bool = False
+    protected_rescue_fetch_k: int = 60
+    protected_rescue_pool_size: int = 10
+    protected_rescue_min_slot_matches: int = 2
 
 
 @dataclass(frozen=True)
@@ -36,6 +40,9 @@ class PolicyConfig:
     adaptive_semantic_slate_mode: str
     adaptive_semantic_slate_anchor: str
     full_rerank_clarification_response: bool
+    protected_rescue_head_size: int = 7
+    protected_rescue_quota: int = 3
+    protected_rescue_rank_limit: int = 10
 
 
 @dataclass(frozen=True)
@@ -106,6 +113,19 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             dense_enabled=bool(search.get("dense_enabled", False)),
             structured_enabled=bool(search.get("structured_enabled", False)),
             strict_rescue_enabled=bool(search.get("strict_rescue_enabled", False)),
+            protected_rescue_enabled=bool(search.get("protected_rescue_enabled", False)),
+            protected_rescue_fetch_k=max(
+                10,
+                min(200, int(search.get("protected_rescue_fetch_k", 60))),
+            ),
+            protected_rescue_pool_size=max(
+                1,
+                min(20, int(search.get("protected_rescue_pool_size", 10))),
+            ),
+            protected_rescue_min_slot_matches=max(
+                2,
+                min(8, int(search.get("protected_rescue_min_slot_matches", 2))),
+            ),
         ),
         policy=PolicyConfig(
             implementation=str(policy.get("implementation", "heuristic")),
@@ -137,6 +157,18 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             ),
             full_rerank_clarification_response=bool(
                 policy.get("full_rerank_clarification_response", False)
+            ),
+            protected_rescue_head_size=max(
+                0,
+                min(9, int(policy.get("protected_rescue_head_size", 7))),
+            ),
+            protected_rescue_quota=max(
+                1,
+                min(10, int(policy.get("protected_rescue_quota", 3))),
+            ),
+            protected_rescue_rank_limit=max(
+                1,
+                min(60, int(policy.get("protected_rescue_rank_limit", 10))),
             ),
         ),
         trace=TraceConfig(
@@ -181,5 +213,14 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             "Unsupported semantic priority mode: "
             f"{result.ranking.semantic_priority_mode}"
         )
+    if result.policy.protected_rescue_head_size + result.policy.protected_rescue_quota > 10:
+        raise ValueError("Protected rescue head size plus quota must not exceed 10")
+    if result.search.protected_rescue_enabled and result.search.strict_rescue_enabled:
+        raise ValueError("Protected rescue and legacy Strict append are mutually exclusive")
+    if (
+        result.search.protected_rescue_enabled
+        and result.policy.full_rerank_clarification_response
+    ):
+        raise ValueError("Protected rescue requires bounded clarification reranking")
 
     return result

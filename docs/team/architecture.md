@@ -15,6 +15,8 @@ Evaluator
        -> clarify path: cheap candidates + structured question
        -> search path: hybrid candidate search -> reranking
   -> Post-ranking policy
+  -> bounded response ordering
+       -> optional protected Strict rescue (response selection only)
   -> Response builder
 ```
 
@@ -45,6 +47,17 @@ can affect every owner.
   coverage, entropy, expected reduction, and answerability priors;
 - `response/builder.py`: strict official output validation;
 - `observability/trace.py`: ground-truth-free internal turn traces.
+
+## Optional protected rescue lane
+
+The experimental protected rescue lane runs only on eligible early clarification
+turns. It reads the canonical `SearchPlan`, reuses the existing BM25 index for a
+field-aware Strict-AND candidate route, and lets a small qualified rescue pool
+compete for the unprotected response tail. The primary retrieval, primary ranking,
+question decision, coverage state, and candidate history remain authoritative;
+policy and coverage never observe the expanded response-selection union. The lane
+is disabled in the selected final configuration and is bounded by a protected
+primary head, a rescue quota, and an expanded-rank limit.
 
 ## Model extension rule
 

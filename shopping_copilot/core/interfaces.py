@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Protocol, Sequence
 
 from shopping_copilot.core.contracts import (
+    Candidate,
     ModelUsage,
     PolicyDecision,
     RankedCandidate,
@@ -31,6 +32,14 @@ class Retriever(Protocol):
     def probe(self, plan: SearchPlan) -> RetrievalDiagnostics: ...
 
     def retrieve(self, plan: SearchPlan) -> RetrievalResult: ...
+
+
+class CandidateRescuer(Protocol):
+    def retrieve(
+        self,
+        plan: SearchPlan,
+        primary: RetrievalResult,
+    ) -> tuple[Candidate, ...]: ...
 
 
 class Ranker(Protocol):
