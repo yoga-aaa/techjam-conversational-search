@@ -18,7 +18,7 @@ from shopping_copilot.core.contracts import (
 from shopping_copilot.core.factory import build_components
 from shopping_copilot.core.pipeline import _prioritize_top_semantic_group
 from shopping_copilot.policy.information_gain import InformationGainQuestionScorer
-from shopping_copilot.policy.heuristic import adaptive_semantic_slate_size
+from shopping_copilot.policy.heuristic import HeuristicPolicy, adaptive_semantic_slate_size
 from shopping_copilot.ranking.global_idf import GlobalCatalogIDF
 from shopping_copilot.state.rule_state import RuleStateTracker
 from starter.agent import Agent
@@ -117,6 +117,27 @@ class TeamPipelineTest(unittest.TestCase):
             [item.parent_asin for item in ordered],
             ["semantic-a", "semantic-b", "legacy-top"],
         )
+
+    def test_fixed_questioning_uses_broad_fallback_after_two_no_preference_answers(self) -> None:
+        state = SessionState(session_id="fallback")
+        state.asked_attributes.extend(["feature", "budget", "size"])
+        state.no_preference_attributes.update({"budget", "size"})
+
+        self.assertEqual(HeuristicPolicy._select_fixed_attribute(state, "buying"), "other")
+
+    def test_fixed_questioning_does_not_fallback_after_one_no_preference_answer(self) -> None:
+        state = SessionState(session_id="fallback")
+        state.asked_attributes.extend(["feature", "budget"])
+        state.no_preference_attributes.add("budget")
+
+        self.assertEqual(HeuristicPolicy._select_fixed_attribute(state, "buying"), "material")
+
+    def test_fixed_buying_questions_prioritize_color_before_budget(self) -> None:
+        state = SessionState(session_id="color-priority")
+        state.active_slots.update({"category": ["shoes"], "material": ["leather"]})
+        state.asked_attributes.extend(["feature", "material"])
+
+        self.assertEqual(HeuristicPolicy._select_fixed_attribute(state, "buying"), "color")
 
     def test_global_idf_gives_rare_catalog_value_more_weight(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
