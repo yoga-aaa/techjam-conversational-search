@@ -9,6 +9,7 @@ from evaluator.local_evaluator import catalog_index, evaluate
 from shopping_copilot.core.config import load_config
 from shopping_copilot.core.contracts import (
     Candidate,
+    PolicyDecision,
     RankedCandidate,
     RetrievalDiagnostics,
     RetrievalResult,
@@ -222,6 +223,25 @@ class TeamPipelineTest(unittest.TestCase):
             self.assertEqual(first["ask_attribute"], "other")
             self.assertEqual(second["ask_attribute"], "other")
             self.assertNotEqual(third["ask_attribute"], "other")
+
+    def test_slate_gate_starts_compact_and_expands_after_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = self._catalog(Path(directory))
+            components = build_components(
+                catalog,
+                load_config("configs/experiments/smart_slate.json"),
+            )
+            decision = PolicyDecision(True, "other", "question", 10)
+            state = SessionState("slate", turn=1)
+            uncertain = [RankedCandidate("A", 1.0, {"matched_product_constraint_count": 0.0})]
+
+            compact = components.policy._apply_slate_gate(state, uncertain, decision)
+            state.turn = 3
+            supported = [RankedCandidate("A", 1.0, {"matched_product_constraint_count": 2.0})]
+            expanded = components.policy._apply_slate_gate(state, supported, decision)
+
+            self.assertEqual(compact.recommendation_count, 1)
+            self.assertEqual(expanded.recommendation_count, 10)
 
     def test_information_gain_prefers_attribute_that_splits_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

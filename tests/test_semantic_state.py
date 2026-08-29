@@ -3,14 +3,27 @@ from __future__ import annotations
 import unittest
 
 from shopping_copilot.core.config import load_config
-from shopping_copilot.core.contracts import RankedCandidate
+from shopping_copilot.core.contracts import RankedCandidate, SessionState
 from shopping_copilot.planning.query_planner import RuleQueryPlanner
 from shopping_copilot.policy.coverage import CandidateCoverageManager
 from shopping_copilot.state.rule_state import RuleStateTracker
-from shopping_copilot.state.semantic_delta import OperationKind, parse_price_value, parse_turn
+from shopping_copilot.state.semantic_delta import OperationKind, apply_operations, parse_price_value, parse_turn
 
 
 class SemanticStateTest(unittest.TestCase):
+    def test_same_turn_values_accumulate_without_preserving_previous_turn_value(self) -> None:
+        state = SessionState("same-turn", active_slots={"other": ["old value"]})
+
+        delta = parse_turn(
+            "For that, what matters is: machine washable; lightweight.",
+            pending_attribute="other",
+            active_slots=state.active_slots,
+            negative_slots=state.negative_slots,
+        )
+        apply_operations(state, delta)
+
+        self.assertEqual(state.active_slots["other"], ["machine washable", "lightweight"])
+
     def setUp(self) -> None:
         self.tracker = RuleStateTracker()
         self.tracker.reset("semantic", {})

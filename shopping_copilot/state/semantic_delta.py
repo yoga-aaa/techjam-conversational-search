@@ -872,13 +872,20 @@ def apply_operations(state: SessionState, delta: TurnDelta) -> bool:
         for attribute in state.no_preference_attributes
     }
 
+    set_slots_seen: set[str] = set()
     for operation in delta.operations:
         slot = _canonical_slot(operation.slot) or operation.slot
         values = tuple(_unique_state_values(operation.values))
         if operation.kind is OperationKind.SET:
             if not values:
                 continue
-            state.active_slots[slot] = list(values)
+            if slot in set_slots_seen:
+                state.active_slots[slot] = _unique_state_values(
+                    [*state.active_slots.get(slot, []), *values]
+                )
+            else:
+                state.active_slots[slot] = list(values)
+                set_slots_seen.add(slot)
             state.negative_slots[slot] = _remove_values(state.negative_slots.get(slot, []), set(values))
             if not state.negative_slots[slot]:
                 state.negative_slots.pop(slot, None)

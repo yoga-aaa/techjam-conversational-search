@@ -98,6 +98,15 @@ class HeuristicRanker:
                 for constraint in constraints
                 if product_matches_value(product, constraint[0], constraint[1])
             }
+            matched_product_constraints = {
+                constraint
+                for constraint in matched_constraints
+                if constraint[0] != "category"
+            }
+            product_constraint_count = sum(
+                constraint[0] != "category"
+                for constraint in constraints
+            )
             text_constraint_score = (
                 sum(
                     constraint_weights[constraint]
@@ -136,6 +145,8 @@ class HeuristicRanker:
                         "matched_constraint_count": float(len(matched_constraints)),
                         "active_constraint_count": float(len(constraints)),
                         "all_constraints_match": float(all_constraints_match),
+                        "matched_product_constraint_count": float(len(matched_product_constraints)),
+                        "product_constraint_count": float(product_constraint_count),
                     },
                 )
             )

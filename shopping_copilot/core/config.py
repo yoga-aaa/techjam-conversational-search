@@ -34,6 +34,11 @@ class PolicyConfig:
     coverage_stagnant_turns: int
     other_first_enabled: bool
     other_first_max_questions: int
+    slate_gate_enabled: bool
+    slate_compact_count: int
+    slate_expand_min_turn: int
+    slate_expand_min_matches: int
+    slate_expand_turn: int
 
 
 @dataclass(frozen=True)
@@ -128,6 +133,11 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             coverage_stagnant_turns=max(1, int(policy.get("coverage_stagnant_turns", 1))),
             other_first_enabled=bool(policy.get("other_first_enabled", False)),
             other_first_max_questions=max(1, int(policy.get("other_first_max_questions", 3))),
+            slate_gate_enabled=bool(policy.get("slate_gate_enabled", False)),
+            slate_compact_count=max(1, int(policy.get("slate_compact_count", 1))),
+            slate_expand_min_turn=max(1, int(policy.get("slate_expand_min_turn", 3))),
+            slate_expand_min_matches=max(1, int(policy.get("slate_expand_min_matches", 2))),
+            slate_expand_turn=max(1, int(policy.get("slate_expand_turn", 5))),
         ),
         trace=TraceConfig(
             enabled=bool(trace.get("enabled", False)),
