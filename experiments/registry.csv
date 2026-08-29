@@ -6,3 +6,23 @@ optimized-final-v1,12dd28a,configs/final.json,Use dialog-state gains without str
 information-gain-policy-v1,204648c,configs/final.json,Choose browsing clarification attributes from candidate information gain,policy,0.955,0.714972,4.78,0.816392,,selected
 stagnation-coverage-v1,68d1af3,configs/experiments/stagnation_coverage.json,Rotate to unseen fully reranked candidates after candidate-set stagnation and boost rare accumulated constraints,state+ranking+policy,0.98,0.713359,3.86,0.846808,,selected
 full-catalog-prior-v1,68d1af3,configs/experiments/stagnation_coverage_catalog_prior.json,Estimate answerability priors from all 50000 catalog products instead of public labels,policy,0.975,0.713351,3.875,0.844005,,keep-alternative
+category-anchor-gated-slate-v2-R0,87a64a6,configs/final.json,Freeze main baseline before category-anchor experiments,state+retrieval+ranking+policy,0.995000,0.778343,3.335000,0.884303,,baseline
+category-anchor-gated-slate-v2-C,87a64a6,configs/experiments/category_anchor_v2.json,Use evaluator-compatible category anchor for high recall,retrieval,0.995000,0.745655,3.310000,0.874996,,reject
+category-anchor-gated-slate-v2-O,87a64a6,configs/experiments/other_first_v2.json,Use repeated other to disclose up to two requirements,policy,0.915000,0.723234,3.445000,0.825570,,reject
+category-anchor-gated-slate-v2-R,87a64a6,configs/experiments/specificity_only_v2.json,Weight concrete constraints and expose match counts,ranking,0.995000,0.735220,3.330000,0.871466,,reject
+category-anchor-gated-slate-v2-G,87a64a6,configs/experiments/slate_gate_v2.json,Gate visible slate by evidence and stability,policy,0.995000,0.808629,3.475000,0.890589,,candidate
+category-anchor-gated-slate-v2-FULL,87a64a6,configs/experiments/cumulative_v2.json,Combine all four experimental switches,all,0.950000,0.786835,3.430000,0.862450,,reject
+category-anchor-gated-slate-v2-G-validation,87a64a6,configs/experiments/slate_gate_v2.json,Validation paired comparison,policy,1.000000,0.871667,2.475000,0.932000,,candidate
+category-anchor-gated-slate-v2-G-holdout,87a64a6,configs/experiments/slate_gate_v2.json,Locked holdout paired comparison,policy,0.975000,0.858780,2.750000,0.910134,,audit
+R0,full,87a64a6cc9232cade87514903cf96dd13f6466ac,configs/final.json,0.995000,0.778343,3.335000,0.766500,0.884303,baseline
+B+C,full,87a64a6cc9232cade87514903cf96dd13f6466ac,configs/experiments/category_anchor_v2.json,0.995000,0.745655,3.310000,0.769000,0.874996,reject
+B+C-hard-filter,full,87a64a6cc9232cade87514903cf96dd13f6466ac,configs/experiments/category_anchor_v2.json,1.000000,0.671490,2.990000,0.801000,0.861647,reject
+B+O,full,87a64a6cc9232cade87514903cf96dd13f6466ac,configs/experiments/other_first_v2.json,0.915000,0.723234,3.445000,0.755500,0.825570,reject
+B+R,full,87a64a6cc9232cade87514903cf96dd13f6466ac,configs/experiments/specificity_only_v2.json,0.995000,0.735220,3.330000,0.767000,0.871466,reject
+B+G,full,87a64a6cc9232cade87514903cf96dd13f6466ac,configs/experiments/slate_gate_v2.json,0.995000,0.808629,3.475000,0.752500,0.890589,keep-as-candidate
+B+G-tuned,full,87a64a6cc9232cade87514903cf96dd13f6466ac,configs/experiments/slate_gate_tuned_v2.json,0.995000,0.798129,3.390000,0.761000,0.889139,reject
+FULL,full,87a64a6cc9232cade87514903cf96dd13f6466ac,configs/experiments/cumulative_v2.json,0.950000,0.786835,3.430000,0.757000,0.862450,reject
+B,validation,87a64a6cc9232cade87514903cf96dd13f6466ac,configs/final.json,1.000000,0.811667,2.150000,0.885000,0.920500,control
+B+G,validation,87a64a6cc9232cade87514903cf96dd13f6466ac,configs/experiments/slate_gate_v2.json,1.000000,0.871667,2.475000,0.852500,0.932000,better-mrr-not-faster
+B,holdout,87a64a6cc9232cade87514903cf96dd13f6466ac,configs/final.json,0.975000,0.801280,2.525000,0.847500,0.897384,control
+B+G,holdout,87a64a6cc9232cade87514903cf96dd13f6466ac,configs/experiments/slate_gate_v2.json,0.975000,0.858780,2.750000,0.825000,0.910134,better-mrr-not-faster

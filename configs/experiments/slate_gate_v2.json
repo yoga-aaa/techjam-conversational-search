@@ -1,0 +1,6 @@
+{
+  "search": {"implementation": "hybrid", "candidate_k": 100, "probe_overload_threshold": 2000, "dense_enabled": false, "structured_enabled": false, "category_anchor_enabled": false},
+  "ranking": {"implementation": "heuristic", "dynamic_constraint_weight": true, "constraint_weight_step": 0.08, "maximum_constraint_weight": 0.55, "rarity_weighting": true},
+  "policy": {"implementation": "heuristic", "broad_recommendation_count": 10, "uncertain_recommendation_count": 10, "confident_score_gap": 0.15, "question_strategy": "information_gain", "question_candidate_limit": 60, "question_min_coverage": 0.12, "question_min_score": 0.01, "question_attribute_priors": {"material": 3.0, "feature": 2.0, "color": 1.1, "style": 0.3, "size": 0.3, "use_case": 0.3, "budget": 0.25, "brand": 0.15}, "coverage_enabled": true, "coverage_candidate_limit": 60, "coverage_overlap_threshold": 0.90, "coverage_min_turn": 4, "coverage_stagnant_turns": 1, "slate_gate_enabled": true, "slate_compact_count": 1, "slate_expand_min_turn": 3, "slate_expand_min_matches": 2, "slate_expand_turn": 5, "slate_stability_enabled": true, "slate_stability_min_jaccard": 0.50},
+  "trace": {"enabled": false, "path": "artifacts/traces.jsonl", "include_rankings": false}
+}

@@ -54,6 +54,9 @@ class SessionState:
     stagnant_candidate_turns: int = 0
     coverage_mode: bool = False
     supersedable_preference: SupersedablePreference | None = None
+    other_question_count: int = 0
+    other_no_additional_count: int = 0
+    last_visible_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -63,7 +63,7 @@ class HeuristicPolicy:
         if not over_general:
             return None
 
-        attribute = self._select_fixed_attribute(state, plan.route)
+        attribute = self._select_attribute(state, plan.route, ())
         if attribute is None:
             return None
         return PolicyDecision(
@@ -89,11 +89,15 @@ class HeuristicPolicy:
             attribute = self._select_attribute(state, plan.route, ranked)
             if attribute is None:
                 return PolicyDecision(False, None, "Here are my best matches.", 10)
-            return PolicyDecision(
+            return self._apply_slate_gate(
+                state,
+                ranked,
+                PolicyDecision(
                 should_ask=True,
                 ask_attribute=attribute,
                 message=QUESTION_TEMPLATES[attribute],
                 recommendation_count=early_decision.recommendation_count,
+                ),
             )
 
         if len(ranked) >= 2:
@@ -111,11 +115,53 @@ class HeuristicPolicy:
         attribute = self._select_attribute(state, plan.route, ranked)
         if attribute is None:
             return PolicyDecision(False, None, "Here are my best matches.", 10)
-        return PolicyDecision(
+        return self._apply_slate_gate(
+            state,
+            ranked,
+            PolicyDecision(
             should_ask=True,
             ask_attribute=attribute,
             message=QUESTION_TEMPLATES[attribute],
             recommendation_count=self.policy_config.uncertain_recommendation_count,
+            ),
+        )
+
+    def _apply_slate_gate(
+        self,
+        state: SessionState,
+        ranked: Sequence[RankedCandidate],
+        decision: PolicyDecision,
+    ) -> PolicyDecision:
+        if not decision.should_ask or not self.policy_config.slate_gate_enabled:
+            return decision
+
+        match_count = int(ranked[0].component_scores.get("matched_constraint_count", 0.0)) if ranked else 0
+        compact = self.policy_config.slate_compact_count
+        expanded = max(10, decision.recommendation_count)
+        should_expand = (
+            state.turn >= self.policy_config.slate_expand_turn
+            or state.other_no_additional_count >= self.policy_config.other_drain_confirmations
+            or (
+                state.turn >= self.policy_config.slate_expand_min_turn
+                and match_count >= self.policy_config.slate_expand_min_matches
+            )
+        )
+        if (
+            self.policy_config.slate_stability_enabled
+            and state.last_visible_ids
+            and ranked
+        ):
+            current_ids = {item.parent_asin for item in ranked[:10]}
+            previous_ids = set(state.last_visible_ids)
+            union = current_ids | previous_ids
+            jaccard = len(current_ids & previous_ids) / len(union) if union else 1.0
+            if jaccard < self.policy_config.slate_stability_min_jaccard:
+                should_expand = True
+        return PolicyDecision(
+            should_ask=decision.should_ask,
+            ask_attribute=decision.ask_attribute,
+            message=decision.message,
+            recommendation_count=expanded if should_expand else compact,
         )
 
     def _select_attribute(
@@ -124,6 +170,13 @@ class HeuristicPolicy:
         route: str,
         ranked: Sequence[RankedCandidate],
     ) -> str | None:
+        if (
+            self.policy_config.other_first_enabled
+            and state.other_question_count < self.policy_config.other_first_max_questions
+            and state.other_no_additional_count < self.policy_config.other_drain_confirmations
+        ):
+            state.question_scores = {"other": 0.0}
+            return "other"
         explicit_exploration = any(
             marker in message.lower()
             for message in state.messages

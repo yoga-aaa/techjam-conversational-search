@@ -63,6 +63,8 @@ class RuleStateTracker:
             return
         if attribute not in state.asked_attributes:
             state.asked_attributes.append(attribute)
+        if attribute == "other":
+            state.other_question_count += 1
 
     def update(self, session_id: str, user_message: str, turn: int) -> SessionState:
         state = self.get(session_id)
@@ -107,6 +109,11 @@ class RuleStateTracker:
 
         after_preference = self._preference_signature(state)
         retrieval_constraints_changed = before_preference[:2] != after_preference[:2]
+        if pending_attribute == "other":
+            if retrieval_constraints_changed:
+                state.other_no_additional_count = 0
+            else:
+                state.other_no_additional_count += 1
         if before_preference != after_preference and retrieval_constraints_changed:
             self._reset_recommendation_history(state)
 
@@ -183,6 +190,7 @@ class RuleStateTracker:
         state.candidate_overlap = 0.0
         state.stagnant_candidate_turns = 0
         state.coverage_mode = False
+        state.last_visible_ids = ()
 
     @staticmethod
     def _update_active_context(

@@ -13,6 +13,8 @@ class SearchConfig:
     probe_overload_threshold: int
     dense_enabled: bool
     structured_enabled: bool
+    category_anchor_enabled: bool
+    category_anchor_candidate_k: int
 
 
 @dataclass(frozen=True)
@@ -31,6 +33,16 @@ class PolicyConfig:
     coverage_overlap_threshold: float
     coverage_min_turn: int
     coverage_stagnant_turns: int
+    other_first_enabled: bool
+    other_first_max_questions: int
+    other_drain_confirmations: int
+    slate_gate_enabled: bool
+    slate_compact_count: int
+    slate_expand_min_turn: int
+    slate_expand_min_matches: int
+    slate_expand_turn: int
+    slate_stability_enabled: bool
+    slate_stability_min_jaccard: float
 
 
 @dataclass(frozen=True)
@@ -40,12 +52,16 @@ class RankingConfig:
     constraint_weight_step: float
     maximum_constraint_weight: float
     rarity_weighting: bool
+    specificity_weighting: bool
+    specificity_weight_step: float
+    all_constraints_bonus: float
 
 
 @dataclass(frozen=True)
 class TraceConfig:
     enabled: bool
     path: str
+    include_rankings: bool
 
 
 @dataclass(frozen=True)
@@ -84,6 +100,9 @@ def load_config(path: str | Path | None = None) -> AppConfig:
                 min(1.0, float(ranking.get("maximum_constraint_weight", 0.55))),
             ),
             rarity_weighting=bool(ranking.get("rarity_weighting", False)),
+            specificity_weighting=bool(ranking.get("specificity_weighting", False)),
+            specificity_weight_step=max(0.0, float(ranking.get("specificity_weight_step", 0.12))),
+            all_constraints_bonus=max(0.0, float(ranking.get("all_constraints_bonus", 0.0))),
         ),
         search=SearchConfig(
             implementation=str(search.get("implementation", "hybrid")),
@@ -91,6 +110,8 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             probe_overload_threshold=max(10, int(search.get("probe_overload_threshold", 2000))),
             dense_enabled=bool(search.get("dense_enabled", False)),
             structured_enabled=bool(search.get("structured_enabled", False)),
+            category_anchor_enabled=bool(search.get("category_anchor_enabled", False)),
+            category_anchor_candidate_k=max(10, int(search.get("category_anchor_candidate_k", 200))),
         ),
         policy=PolicyConfig(
             implementation=str(policy.get("implementation", "heuristic")),
@@ -113,6 +134,16 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             ),
             coverage_min_turn=max(1, int(policy.get("coverage_min_turn", 2))),
             coverage_stagnant_turns=max(1, int(policy.get("coverage_stagnant_turns", 1))),
+            other_first_enabled=bool(policy.get("other_first_enabled", False)),
+            other_first_max_questions=max(1, int(policy.get("other_first_max_questions", 3))),
+            other_drain_confirmations=max(1, int(policy.get("other_drain_confirmations", 2))),
+            slate_gate_enabled=bool(policy.get("slate_gate_enabled", False)),
+            slate_compact_count=max(1, min(10, int(policy.get("slate_compact_count", 1)))),
+            slate_expand_min_turn=max(1, int(policy.get("slate_expand_min_turn", 3))),
+            slate_expand_min_matches=max(1, int(policy.get("slate_expand_min_matches", 2))),
+            slate_expand_turn=max(1, int(policy.get("slate_expand_turn", 5))),
+            slate_stability_enabled=bool(policy.get("slate_stability_enabled", False)),
+            slate_stability_min_jaccard=max(0.0, min(1.0, float(policy.get("slate_stability_min_jaccard", 0.50)))),
         ),
         trace=TraceConfig(
             enabled=bool(trace.get("enabled", False)),
@@ -121,6 +152,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
                 if Path(trace.get("path", "artifacts/traces.jsonl")).is_absolute()
                 else PROJECT_ROOT / Path(trace.get("path", "artifacts/traces.jsonl"))
             ),
+            include_rankings=bool(trace.get("include_rankings", False)),
         ),
     )
 

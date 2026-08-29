@@ -81,7 +81,7 @@ class ShoppingCopilotAgent:
 
         self.components.state_tracker.mark_asked(session_id, decision.ask_attribute)
         latency_ms = round((perf_counter() - started) * 1000.0, 3)
-        self.components.trace_sink.record({
+        trace_event = {
             "session_id": session_id,
             "turn": turn,
             "intent_mode": state.intent_mode,
@@ -100,7 +100,24 @@ class ShoppingCopilotAgent:
             "shown_candidate_count": len(state.shown_asins),
             "recommendation_count": decision.recommendation_count,
             "latency_ms": latency_ms,
-        })
+        }
+        if self.config.trace.include_rankings:
+            trace_event.update({
+                "retrieved_ids": [item.parent_asin for item in result.candidates],
+                "pre_gate_ranked_ids": [item.parent_asin for item in ranked[:100]],
+                "pre_gate_rankings": [
+                    {
+                        "parent_asin": item.parent_asin,
+                        "score": round(item.final_score, 9),
+                        "components": item.component_scores,
+                    }
+                    for item in ranked[:100]
+                ],
+                "visible_ids": [item.parent_asin for item in response_ranked[: decision.recommendation_count]],
+                "leader_match_count": int(ranked[0].component_scores.get("matched_constraint_count", 0.0)) if ranked else 0,
+                "leader_all_constraints_match": bool(ranked and ranked[0].component_scores.get("all_constraints_match", 0.0)),
+            })
+        self.components.trace_sink.record(trace_event)
         response = self.components.response_builder.build(
             ranked=response_ranked,
             decision=decision,
@@ -108,4 +125,9 @@ class ShoppingCopilotAgent:
             usage=ModelUsage(),
         )
         self.components.coverage_manager.record_response(state, response["recommendations"])
+        state.last_visible_ids = tuple(
+            item.get("parent_asin")
+            for item in response.get("recommendations", [])
+            if isinstance(item, dict) and item.get("parent_asin")
+        )
         return response
