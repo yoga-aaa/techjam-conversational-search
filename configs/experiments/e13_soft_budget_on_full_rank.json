@@ -1,0 +1,62 @@
+{
+  "state": {"implementation": "rule"},
+  "search": {
+    "implementation": "hybrid",
+    "candidate_k": 100,
+    "probe_overload_threshold": 2000,
+    "dense_enabled": false,
+    "structured_enabled": false,
+    "category_anchor_enabled": true,
+    "category_anchor_full_pool": true
+  },
+  "ranking": {
+    "implementation": "evidence",
+    "dynamic_constraint_weight": true,
+    "constraint_weight_step": 0.08,
+    "maximum_constraint_weight": 0.55,
+    "rarity_weighting": true,
+    "specificity_weighting": true,
+    "specificity_weight_step": 0.12,
+    "all_constraints_bonus": 0.20,
+    "exact_base_weight": 0.8,
+    "exact_token_weight": 0.55,
+    "exact_unmatched_penalty": 0.35,
+    "exact_all_match_bonus": 4.0,
+    "exact_anchor_bonus": 20.0,
+    "soft_budget_as_cap": true
+  },
+  "policy": {
+    "implementation": "heuristic",
+    "broad_recommendation_count": 10,
+    "uncertain_recommendation_count": 10,
+    "confident_score_gap": 0.15,
+    "question_strategy": "information_gain",
+    "question_candidate_limit": 60,
+    "question_min_coverage": 0.12,
+    "question_min_score": 0.01,
+    "question_attribute_priors": {
+      "material": 3.0,
+      "feature": 2.0,
+      "color": 1.1,
+      "style": 0.3,
+      "size": 0.3,
+      "use_case": 0.3,
+      "budget": 0.25,
+      "brand": 0.15
+    },
+    "coverage_enabled": true,
+    "coverage_candidate_limit": 60,
+    "coverage_overlap_threshold": 0.90,
+    "coverage_min_turn": 4,
+    "coverage_stagnant_turns": 1,
+    "other_first_enabled": true,
+    "other_first_max_questions": 4,
+    "slate_gate_enabled": true,
+    "slate_compact_count": 1,
+    "slate_expand_min_turn": 3,
+    "slate_expand_min_matches": 2,
+    "slate_expand_turn": 4,
+    "global_response_ranking": true
+  },
+  "trace": {"enabled": false, "path": "artifacts/traces.jsonl"}
+}

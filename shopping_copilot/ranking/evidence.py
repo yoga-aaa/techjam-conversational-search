@@ -53,6 +53,15 @@ class EvidenceRanker:
         point = self._budget_point(state)
         if point is None:
             return 0.0
+        if self.config.soft_budget_as_cap:
+            if price is None or price <= point:
+                return 0.0
+            relative_overage = (price - point) / max(point, 1.0)
+            if relative_overage <= 0.10:
+                return -0.2
+            if relative_overage <= 0.25:
+                return -0.8
+            return -1.5
         if price is None:
             return -0.5
         if abs(price - point) <= max(0.01, 0.01 * point):
@@ -132,4 +141,3 @@ class EvidenceRanker:
                 },
             ))
         return sorted(ranked, key=lambda item: (-item.final_score, item.parent_asin))
-

@@ -60,12 +60,10 @@ class RuleQueryPlanner:
         ][:40]
         route = state.intent_mode if state.intent_mode in {"buying", "browsing"} else "browsing"
 
+        # Budget is deliberately kept out of retrieval filters. Prices can be
+        # missing or stale in the catalog, so the ranker treats budget as a
+        # soft preference after candidates have been recalled.
         hard_filters: dict[str, object] = {}
-        if state.active_slots.get("budget"):
-            try:
-                hard_filters["price_max"] = float(state.active_slots["budget"][-1])
-            except ValueError:
-                pass
 
         structured_constraints = {
             name: tuple(values)

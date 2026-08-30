@@ -58,6 +58,7 @@ class RankingConfig:
     exact_unmatched_penalty: float
     exact_all_match_bonus: float
     exact_anchor_bonus: float
+    soft_budget_as_cap: bool
 
 
 @dataclass(frozen=True)
@@ -119,6 +120,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
                 float(ranking.get("exact_all_match_bonus", 4.0)),
             ),
             exact_anchor_bonus=max(0.0, float(ranking.get("exact_anchor_bonus", 20.0))),
+            soft_budget_as_cap=bool(ranking.get("soft_budget_as_cap", False)),
         ),
         search=SearchConfig(
             implementation=str(search.get("implementation", "hybrid")),
