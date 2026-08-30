@@ -302,6 +302,52 @@ class SemanticStateTest(unittest.TestCase):
             ),
         )
 
+    def test_natural_no_preference_paraphrases_do_not_pollute_slots(self) -> None:
+        cases = (
+            ("I'm flexible about color.", "color"),
+            ("I have no strong opinion on size.", "size"),
+            ("There is no particular material I need.", "material"),
+            ("The other requirement doesn't really matter to me.", "other"),
+        )
+        for message, slot in cases:
+            with self.subTest(message=message):
+                state = SessionState(message)
+                apply_operations(state, parse_turn(message, slot, state.active_slots, state.negative_slots))
+                self.assertNotIn(slot, state.active_slots)
+                self.assertIn(slot, state.no_preference_attributes)
+
+    def test_contextual_open_reply_preserves_comma_bearing_catalog_value(self) -> None:
+        state = SessionState("open-wrapper")
+        delta = parse_turn(
+            "The option I have in mind is spandex and 65% Spandex, 35% Polyester.",
+            "other",
+            state.active_slots,
+            state.negative_slots,
+        )
+        apply_operations(state, delta)
+        self.assertEqual(state.active_slots["other"], ["spandex", "65% spandex, 35% polyester"])
+
+    def test_additive_preference_preserves_existing_value_but_switch_replaces(self) -> None:
+        state = SessionState("additive")
+        apply_operations(state, parse_turn("I prefer black.", None, state.active_slots, state.negative_slots))
+        apply_operations(state, parse_turn("I also like blue.", None, state.active_slots, state.negative_slots))
+        self.assertEqual(state.active_slots["color"], ["black", "blue"])
+        apply_operations(state, parse_turn("Switch to red.", None, state.active_slots, state.negative_slots))
+        self.assertEqual(state.active_slots["color"], ["red"])
+
+    def test_natural_negative_phrases_never_become_positive_seeds(self) -> None:
+        for message in (
+            "I do not really want leather.",
+            "I would rather stay away from leather.",
+            "Leather is not really my thing.",
+            "I am not keen on leather.",
+        ):
+            with self.subTest(message=message):
+                state = SessionState(message)
+                apply_operations(state, parse_turn(message, None, state.active_slots, state.negative_slots))
+                self.assertNotIn("leather", state.active_slots.get("material", []))
+                self.assertIn("leather", state.negative_slots.get("material", []))
+
 
 if __name__ == "__main__":
     unittest.main()
