@@ -34,13 +34,15 @@ can affect every owner.
 
 ## Default implementations
 
-- `state/rule_state.py`: offline accumulation, no-preference handling, and intent override;
-- `planning/query_planner.py`: shared Buying/Browsing planning with route-specific weights;
-- `retrieval/bm25.py`: official-style SQLite FTS5 candidate search;
+- `state/rule_state.py`: offline accumulation, no-preference handling, and explicit intent-override tracking;
+- `planning/query_planner.py`: shared Buying/Browsing planning with route-specific weights and current-state-only query projection;
+- `retrieval/bm25.py`: official-style SQLite FTS5 candidate search; after an explicit override, the selected config conditionally fuses at most five deterministic query variants with RRF;
 - `retrieval/hybrid.py`: stable multi-route fusion point;
+- `retrieval/category_anchor.py`: complete same-category candidate pool used for global evidence ranking;
 - `retrieval/structured.py`: optional attribute-aware route, disabled in the selected final config after a public-set regression;
-- `ranking/heuristic.py`: offline scoring over the candidate set;
+- `ranking/evidence.py`: phrase evidence, category anchoring, lexical-route consensus, budget, profile, and popularity scoring over the complete candidate set;
 - `policy/heuristic.py`: over-generality gate, question selection, and dynamic result count;
+- `policy/coverage.py`: candidate-stagnation detection and bounded unseen-candidate scheduling, including the override-only 7/3 consensus-tail balance;
 - `policy/information_gain.py`: candidate-driven question scoring from attribute
   coverage, entropy, expected reduction, and answerability priors;
 - `response/builder.py`: strict official output validation;

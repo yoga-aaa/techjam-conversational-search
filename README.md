@@ -16,10 +16,11 @@ official evaluator
 ```
 
 The default configuration is fully offline and uses rule-based conversation state,
-SQLite FTS5/BM25 candidate search, deterministic reranking, and a deterministic
-clarification policy. Dense retrieval and model-backed implementations can be added
-behind the stable interfaces in `shopping_copilot/core/interfaces.py` and selected
-through config without changing the pipeline.
+SQLite FTS5/BM25 search plus a full-category candidate anchor, deterministic evidence
+reranking, and a deterministic clarification policy. Dense retrieval and model-backed
+implementations can be added behind the stable interfaces in
+`shopping_copilot/core/interfaces.py` and selected through config without changing
+the pipeline.
 
 Run the team tests without downloading the full catalog:
 
@@ -34,11 +35,15 @@ python scripts/verify_data.py --catalog data/catalog.jsonl
 python -m scripts.run_evaluation --config configs/final.json --output results.json
 ```
 
-The current selected development configuration is `configs/final.json`. On the
-200-session public set it produced Hit Rate@10 `0.995`, MRR `0.778343`, MTTC
-`3.335`, and recommended technical score `0.884303`. These are public-set
-development results, not evidence of private-set performance. Controlled runs
-and rejected alternatives are recorded in `experiments/registry.csv`.
+The current selected development configuration is `configs/final.json` (E27).
+After the intent-override state and history fixes, the frozen 2,000-session
+development set produced Hit Rate@10 `0.9925`, MRR `0.888941`, MTTC `2.5515`,
+Efficiency `0.84485`, and recommended technical score `0.931902`.
+On the 200-session public set it produced Hit Rate@10 `1.0`, MRR `0.953667`,
+MTTC `2.215`, Efficiency `0.8785`, and technical score `0.9618`. These local
+results are not a guarantee of private-set performance. The branch comparison,
+holdout caveat, selected production scope, and controlled runs are documented in
+`docs/e27_production_integration.md` and `experiments/registry.csv`.
 
 See `docs/team/architecture.md` for module boundaries and
 `docs/team/ownership.md` for the five-person ownership model.
@@ -120,6 +125,10 @@ TechnicalScore = 0.50 × HitRate@10 + 0.30 × MRR + 0.20 × Efficiency
 Efficiency = clip((11 - MTTC) / 10, 0, 1)
 ```
 
+`TechnicalScore` is an objective input to the `Technical Execution` assessment.
+It is not a separate judging criterion and does not represent the entire
+`Technical Execution` score.
+
 Only exact `parent_asin` equality produces a hit. Core metrics are also reported by scenario.
 
 ## Model Choice and Cost
@@ -141,7 +150,6 @@ evaluator/local_evaluator.py      public-set simulator and scorer
 ## Judging and Submission Policy
 
 - Participant submission requirements: `docs/submission_rules.md`
-- Participant release checklist: `docs/participant_release_checklist.md`
 - Organizer-only final judging controls: `organizer/JUDGING_RUNBOOK.md`
 - Organizer private release checklist: `organizer/private_release_checklist.md`
 - Judging day operations SOP: `organizer/JUDGING_DAY_SOP.md`

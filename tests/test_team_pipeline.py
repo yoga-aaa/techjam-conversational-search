@@ -9,6 +9,7 @@ from evaluator.local_evaluator import catalog_index, evaluate
 from shopping_copilot.core.config import load_config
 from shopping_copilot.core.contracts import (
     Candidate,
+    PolicyDecision,
     RankedCandidate,
     RetrievalDiagnostics,
     RetrievalResult,
@@ -31,6 +32,12 @@ PROFILE = {
 
 
 class TeamPipelineTest(unittest.TestCase):
+    def test_full_rank_config_preserves_anchor_pool_for_global_ranking(self) -> None:
+        config = load_config("configs/final.json")
+
+        self.assertTrue(config.search.category_anchor_full_pool)
+        self.assertTrue(config.policy.global_response_ranking)
+
     def _catalog(self, root: Path) -> Path:
         products = [
             {
@@ -59,6 +66,24 @@ class TeamPipelineTest(unittest.TestCase):
             },
         ]
         path = root / "catalog.jsonl"
+        path.write_text("".join(json.dumps(item) + "\n" for item in products), encoding="utf-8")
+        return path
+
+    def _cotton_shoe_catalog(self, root: Path, count: int = 12) -> Path:
+        products = [
+            {
+                "parent_asin": f"P{index:02d}",
+                "title": f"Cotton casual shoe model {index:02d}",
+                "features": ["cotton"],
+                "details": {"material": "cotton"},
+                "description": ["casual cotton shoe"],
+                "categories": ["Clothing", "Shoes"],
+                "store": "Example",
+                "price": 29.0,
+            }
+            for index in range(count)
+        ]
+        path = root / "cotton_shoes.jsonl"
         path.write_text("".join(json.dumps(item) + "\n" for item in products), encoding="utf-8")
         return path
 
@@ -166,6 +191,26 @@ class TeamPipelineTest(unittest.TestCase):
             self.assertIn("A", by_id)
             self.assertIn("structured", by_id["A"].source_routes)
 
+    def test_category_anchor_route_contributes_exact_category_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = self._catalog(Path(directory))
+            config = load_config("configs/final.json")
+            components = build_components(catalog, config)
+            state = components.state_tracker.reset("anchor", PROFILE)
+            state = components.state_tracker.update(
+                "anchor",
+                "I'm looking for Shoes. A key requirement is: waterproof.",
+                1,
+            )
+            plan = components.planner.build(state)
+
+            result = components.retriever.retrieve(plan)
+            by_id = {candidate.parent_asin: candidate for candidate in result.candidates}
+
+            self.assertTrue(config.search.category_anchor_enabled)
+            self.assertIn("A", by_id)
+            self.assertIn("category_anchor", by_id["A"].source_routes)
+
     def test_browsing_turn_asks_a_structured_question(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             catalog = self._catalog(Path(directory))
@@ -173,6 +218,106 @@ class TeamPipelineTest(unittest.TestCase):
             agent.reset("s3", PROFILE)
             response = agent.respond("s3", "I'm looking for shoes, but I'm still exploring.", 1, 10)
             self.assertEqual(response["ask_attribute"], "use_case")
+
+    def test_other_first_policy_can_repeat_until_requirements_are_drained(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = self._catalog(Path(directory))
+            agent = Agent(catalog, config_path="configs/final.json")
+            agent.reset("other-first", PROFILE)
+
+            first = agent.respond(
+                "other-first",
+                "I'm looking for Shoes, but I'm still exploring.",
+                1,
+                10,
+            )
+            second = agent.respond(
+                "other-first",
+                "For that, what matters is: waterproof; synthetic.",
+                2,
+                10,
+            )
+            third = agent.respond(
+                "other-first",
+                "I don't have an additional preference for other.",
+                3,
+                10,
+            )
+
+            self.assertEqual(first["ask_attribute"], "other")
+            self.assertEqual(second["ask_attribute"], "other")
+            self.assertNotEqual(third["ask_attribute"], "other")
+
+    def test_boundary_no_preference_does_not_end_open_requirement_collection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = self._catalog(Path(directory))
+            agent = Agent(catalog, config_path="configs/final.json")
+            agent.reset("boundary-other", PROFILE)
+            first = agent.respond(
+                "boundary-other",
+                "I'm looking for Shoes, but I'm still exploring.",
+                1,
+                10,
+            )
+            second = agent.respond(
+                "boundary-other",
+                "I don't have a preference for other; please use your judgment.",
+                2,
+                10,
+            )
+
+            self.assertEqual(first["ask_attribute"], "other")
+            self.assertEqual(second["ask_attribute"], "other")
+
+    def test_slate_gate_starts_compact_and_expands_after_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = self._catalog(Path(directory))
+            components = build_components(
+                catalog,
+                load_config("configs/final.json"),
+            )
+            decision = PolicyDecision(True, "other", "question", 10)
+            state = SessionState("slate", turn=1)
+            uncertain = [RankedCandidate("A", 1.0, {"matched_product_constraint_count": 0.0})]
+
+            compact = components.policy._apply_slate_gate(state, uncertain, decision)
+            state.turn = 3
+            supported = [RankedCandidate("A", 1.0, {"matched_product_constraint_count": 2.0})]
+            expanded = components.policy._apply_slate_gate(state, supported, decision)
+
+            self.assertEqual(compact.recommendation_count, 1)
+            self.assertEqual(expanded.recommendation_count, 10)
+
+    def test_override_bypasses_presearch_question_but_keeps_slate_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = self._cotton_shoe_catalog(Path(directory))
+            agent = Agent(catalog, config_path="configs/final.json")
+            agent.reset("slate-override", PROFILE)
+
+            ordinary = agent.respond(
+                "slate-override",
+                "I'm looking for shoes. Easy to use without wiggling.",
+                1,
+                10,
+            )
+            override = agent.respond(
+                "slate-override",
+                "Actually, ignore my earlier preference. What I need is: cotton.",
+                3,
+                10,
+            )
+
+            self.assertIsNotNone(ordinary["ask_attribute"])
+            self.assertEqual(len(ordinary["recommendations"]), 1)
+            self.assertEqual(override["ask_attribute"], "other")
+            self.assertEqual(len(override["recommendations"]), 1)
+
+            components = agent._impl.components
+            state = components.state_tracker.get("slate-override")
+            plan = components.planner.build(state)
+            forced_overload = RetrievalDiagnostics(5000, 5000, 0.0, plan.route)
+            self.assertIsNone(components.policy.before_search(state, plan, forced_overload))
+            self.assertEqual(state.pending_attribute, "other")
 
     def test_information_gain_prefers_attribute_that_splits_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -297,6 +442,7 @@ class TeamPipelineTest(unittest.TestCase):
     def test_override_clears_candidate_coverage_history(self) -> None:
         tracker = RuleStateTracker()
         state = tracker.reset("override-coverage", PROFILE)
+        state.active_slots["material"] = ["cotton"]
         state.shown_asins.update({"A", "B"})
         state.previous_candidate_ids = ("A", "B")
         state.previous_slot_signature = (("category", ("shoes",)),)
@@ -340,6 +486,54 @@ class TeamPipelineTest(unittest.TestCase):
                 ranked[0].component_scores["constraint_weight"],
                 plan.constraint_weight,
             )
+
+    def test_specific_complete_match_receives_ranking_bonus(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            products = [
+                {
+                    "parent_asin": "A",
+                    "title": "Blue easy-care shirt",
+                    "features": ["machine washable"],
+                    "details": {"color": "blue"},
+                    "categories": ["Clothing", "Shirts"],
+                    "store": "Example",
+                },
+                {
+                    "parent_asin": "B",
+                    "title": "Blue shirt",
+                    "features": ["hand wash only"],
+                    "details": {"color": "blue"},
+                    "categories": ["Clothing", "Shirts"],
+                    "store": "Example",
+                },
+            ]
+            catalog = root / "catalog.jsonl"
+            catalog.write_text(
+                "".join(json.dumps(item) + "\n" for item in products),
+                encoding="utf-8",
+            )
+            components = build_components(
+                catalog,
+                load_config("configs/final.json"),
+            )
+            state = components.state_tracker.reset("specific", PROFILE)
+            state.active_slots = {
+                "category": ["shirts"],
+                "color": ["blue"],
+                "feature": ["machine washable"],
+            }
+            plan = components.planner.build(state)
+            result = RetrievalResult(
+                candidates=(Candidate("A", lexical_score=1.0), Candidate("B", lexical_score=1.0)),
+                diagnostics=RetrievalDiagnostics(2, 1, 0.0, plan.route),
+            )
+
+            ranked = components.ranker.rank(state, plan, result)
+
+            self.assertEqual(ranked[0].parent_asin, "A")
+            self.assertEqual(ranked[0].component_scores["all_constraints_match"], 1.0)
+            self.assertEqual(ranked[1].component_scores["all_constraints_match"], 0.0)
 
     def test_pipeline_runs_inside_official_evaluator(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

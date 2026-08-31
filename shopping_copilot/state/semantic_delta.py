@@ -60,6 +60,7 @@ SLOT_ALIASES = {
 }
 
 _SLOT_LABEL = r"(?:color|material|size|style|brand|budget|feature|use(?:\s|_)*case|category)"
+_BOUNDARY_SLOT_LABEL = rf"(?:{_SLOT_LABEL}|other(?:\s+requirement)?)"
 _SLOT_LABEL_RE = re.compile(rf"\b(?P<slot>{_SLOT_LABEL})\b", re.IGNORECASE)
 _POSITIVE_CUE_RE = re.compile(
     r"\b(?:what\s+(?:i\s+)?need\s+is|what\s+matters\s+is|"
@@ -100,6 +101,11 @@ _EXPLICIT_OVERRIDE_CUE = re.compile(
 )
 _EXPLICIT_OVERRIDE_PAYLOAD = re.compile(
     r"\bwhat\s+(?:i\s+)?need\s+is\s*:?\s*(?P<payload>.+?)\s*[.!?]?\s*$",
+    re.IGNORECASE | re.DOTALL,
+)
+_POSITIVE_WRAPPER_PAYLOAD = re.compile(
+    r"^\s*(?:for\s+that,?\s+)?what\s+(?:i\s+)?(?:need|matters)\s+is\s*:\s*"
+    r"(?P<payload>.+?)\s*[.!?]?\s*$",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -145,7 +151,7 @@ def _split_clauses(text: str) -> list[str]:
     for match in re.finditer(r",", text):
         remainder = text[match.end():].lstrip()
         prefix = text[:match.start()].strip()
-        if _looks_like_clause_start(remainder) and not re.search(r"\bfor\s+that$", prefix, re.IGNORECASE):
+        if _looks_like_clause_start(remainder) and not re.search(r"\b(?:for\s+that|at\s+the\s+moment)$", prefix, re.IGNORECASE):
             boundaries.add(match.start())
     for match in re.finditer(r"\b(?:but|however)\b", text):
         prefix = text[:match.start()]
@@ -224,6 +230,57 @@ def _split_values(value: str) -> tuple[str, ...]:
     parts = re.split(r"\s*(?:[,;]|\bor\b|\band\b)\s*", value, flags=re.IGNORECASE)
     cleaned = tuple(item for item in (_clean_value(part) for part in parts) if item)
     return tuple(dict.fromkeys(cleaned))
+
+
+def _split_open_reply_values(value: str) -> tuple[str, ...]:
+    """Split open-question lists while preserving comma-bearing catalog values."""
+
+    parts = re.split(r"\s*;\s*|\s+(?:and|or)\s+", value, flags=re.IGNORECASE)
+    cleaned = tuple(item for item in (_clean_value(part) for part in parts) if item)
+    return tuple(dict.fromkeys(cleaned))
+
+
+def _open_reply_operation(clause: str, pending_attribute: str | None) -> SlotOperation | None:
+    patterns = (
+        rf"\b(?:i['’]?d|i\s+would)\s+go\s+with\s+(?P<value>.+?)\s+for\s+(?P<slot>{_BOUNDARY_SLOT_LABEL})$",
+        rf"\bprioritize\s+this\s+for\s+(?P<slot>{_BOUNDARY_SLOT_LABEL})\s*:\s*(?P<value>.+)$",
+        rf"\bregarding\s+(?P<slot>{_BOUNDARY_SLOT_LABEL})\s*,?\s*(?P<value>.+?)\s+works?\s+best\s+for\s+me$",
+        r"\bfor\s+that\s+part\s*,?\s*(?:i['’]?d|i\s+would)\s+prefer\s+(?P<value>.+)$",
+        r"\bthe\s+option\s+i\s+have\s+in\s+mind\s+is\s+(?P<value>.+)$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, clause, re.IGNORECASE)
+        if match:
+            raw_slot = match.groupdict().get("slot")
+            if raw_slot:
+                slot = "other" if raw_slot.startswith("other") else _canonical_slot(raw_slot)
+            else:
+                slot = _canonical_slot(pending_attribute)
+            values = _split_open_reply_values(match.group("value"))
+            return SlotOperation(OperationKind.SET, slot, values) if slot and values else None
+    return None
+
+
+def _initial_preference_operations(clause: str) -> tuple[SlotOperation, ...]:
+    combined = re.search(
+        r"\bi\s+want\s+to\s+browse\s+(?P<category>.+?)\s*;\s*initially\s*,?\s*keep\s+this\s+in\s+mind\s*:\s*(?P<value>.+)$",
+        clause,
+        re.IGNORECASE,
+    )
+    if combined:
+        return (
+            SlotOperation(OperationKind.SET, "category", (_clean_value(combined.group("category")),)),
+            SlotOperation(OperationKind.SET, "feature", (_clean_value(combined.group("value")),)),
+        )
+    feature = re.search(
+        r"\bat\s+the\s+moment\s*,?\s*i\s+prefer\s+(?P<value>.+)$",
+        clause,
+        re.IGNORECASE,
+    )
+    if feature:
+        value = _clean_value(feature.group("value"))
+        return (SlotOperation(OperationKind.SET, "feature", (value,)),) if value else ()
+    return ()
 
 
 def _parse_number_words(tokens: tuple[str, ...]) -> float | None:
@@ -314,6 +371,21 @@ def _explicit_override_payload(text: str) -> str | None:
     if not _EXPLICIT_OVERRIDE_CUE.search(text):
         return None
     match = _EXPLICIT_OVERRIDE_PAYLOAD.search(text)
+    if not match:
+        return None
+    payload = match.group("payload").strip(" .;!?\t\r\n")
+    return payload or None
+
+
+def _positive_wrapper_payload(text: str) -> str | None:
+    """Return the payload of a high-confidence positive wrapper.
+
+    Requiring a colon keeps an embedded ``without`` inside the disclosed
+    product value while ordinary requests such as ``shoes without leather``
+    continue through the exclusion rules.
+    """
+
+    match = _POSITIVE_WRAPPER_PAYLOAD.match(text)
     if not match:
         return None
     payload = match.group("payload").strip(" .;!?\t\r\n")
@@ -469,6 +541,25 @@ def _operation(kind: OperationKind, typed: tuple[tuple[str, tuple[str, ...]], ..
     return tuple(SlotOperation(kind, slot, values) for slot, values in typed if slot)
 
 
+def _preserve_existing_for_additive_set(
+    clause: str,
+    operations: tuple[SlotOperation, ...],
+    active_slots: dict[str, list[str]],
+) -> tuple[SlotOperation, ...]:
+    """Represent explicit additive language using the existing SET contract."""
+
+    if not re.search(r"\b(?:also|in\s+addition|too)\b", clause, re.IGNORECASE):
+        return operations
+    merged: list[SlotOperation] = []
+    for operation in operations:
+        if operation.kind is not OperationKind.SET:
+            merged.append(operation)
+            continue
+        values = tuple(dict.fromkeys((*active_slots.get(operation.slot, ()), *operation.values)))
+        merged.append(SlotOperation(operation.kind, operation.slot, values))
+    return tuple(merged)
+
+
 def _strip_cue_words(text: str) -> str:
     text = re.sub(
         r"\b(?:i|you|we|please|actually|also|what|matters|is|a|key|requirement|"
@@ -517,12 +608,27 @@ def _boundary_operation(
     pending_attribute: str | None,
 ) -> SlotOperation | None:
     lowered = clause.casefold()
+    flexible_patterns = (
+        rf"\b(?:i(?:'m|\s+am)\s+)?(?:completely\s+)?flexible\s+(?:about|on)\s+(?P<slot>{_BOUNDARY_SLOT_LABEL})\b",
+        rf"\bi\s+have\s+no\s+strong\s+opinion\s+on\s+(?P<slot>{_BOUNDARY_SLOT_LABEL})\b",
+        rf"\bthere\s+is\s+no\s+particular\s+(?P<slot>{_BOUNDARY_SLOT_LABEL})\s+i\s+need\b",
+        rf"\bno\s+particular\s+(?P<slot>{_BOUNDARY_SLOT_LABEL})\s+stands\s+out\b",
+        rf"\b(?P<slot>{_BOUNDARY_SLOT_LABEL})\s+is\s+up\s+to\s+you\b",
+        rf"\bany\s+(?P<slot>{_BOUNDARY_SLOT_LABEL})\s+(?:is\s+fine(?:\s+with\s+me)?|works)\b",
+    )
+    for pattern in flexible_patterns:
+        match = re.search(pattern, lowered)
+        if match:
+            raw_slot = match.group("slot")
+            slot = "other" if raw_slot.startswith("other") else _canonical_slot(raw_slot)
+            return SlotOperation(OperationKind.DONTCARE, slot or (_canonical_slot(pending_attribute) or "other"))
     explicit_match = re.search(
-        rf"\b(?P<slot>{_SLOT_LABEL})\s+(?:doesn['’]?t|does\s+not)\s+matter\b",
+        rf"\b(?P<slot>{_BOUNDARY_SLOT_LABEL})\s+(?:doesn['’]?t|does\s+not)\s+(?:really\s+)?matter\b",
         lowered,
     )
     if explicit_match:
-        return SlotOperation(OperationKind.DONTCARE, _canonical_slot(explicit_match.group("slot")) or "other")
+        raw_slot = explicit_match.group("slot")
+        return SlotOperation(OperationKind.DONTCARE, "other" if raw_slot.startswith("other") else (_canonical_slot(raw_slot) or "other"))
     explicit_match = re.search(
         rf"\bany\s+(?P<slot>{_SLOT_LABEL})\s+is\s+fine\b",
         lowered,
@@ -578,6 +684,30 @@ def _parse_clause(
     if boundary:
         return (boundary,), ()
 
+    open_reply = _open_reply_operation(clause, pending_attribute)
+    if open_reply:
+        return (open_reply,), _positive_context(clause, (open_reply,))
+
+    initial_operations = _initial_preference_operations(clause)
+    if initial_operations:
+        return initial_operations, _positive_context(clause, initial_operations)
+
+    # Treat the released positive wrapper as a value boundary before looking
+    # for generic negative cues.  This is intentionally limited to the
+    # colon-delimited form so ordinary ``without`` requests remain excludes.
+    positive_wrapper = _positive_wrapper_payload(clause)
+    if positive_wrapper is not None:
+        typed = _typed_values(
+            positive_wrapper,
+            clause,
+            pending_attribute,
+            active_slots,
+            negative_slots,
+            _explicit_slot(clause),
+        )
+        operations = _operation(OperationKind.SET, typed)
+        return operations, _positive_context(clause, operations)
+
     explicit_slot = _explicit_slot(clause)
     patterns: tuple[tuple[OperationKind, str], ...] = (
         (OperationKind.ALLOW, r"\bi\s+don['’]?t\s+mind\s+(.+)$"),
@@ -588,15 +718,24 @@ def _parse_clause(
         (OperationKind.REMOVE, r"\bremove\s+(.+?)\s+as\s+(?:a\s+)?requirement$"),
         (OperationKind.REMOVE, r"\bforget\s+(?:the\s+)?(.+?)\s+preference$"),
         (OperationKind.EXCLUDE, r"\b(?:do\s+not|don['’]?t)\s+want\s+(.+)$"),
+        (OperationKind.EXCLUDE, r"\b(?:do\s+not|don['’]?t)\s+really\s+want\s+(.+)$"),
+        (OperationKind.EXCLUDE, r"\b(?:would\s+)?rather\s+(?:stay\s+away\s+from|avoid)\s+(.+)$"),
+        (OperationKind.EXCLUDE, r"\bnot\s+(?:really\s+)?keen\s+on\s+(.+)$"),
+        (OperationKind.EXCLUDE, r"\bnot\s+(?:really\s+)?a\s+fan\s+of\s+(.+)$"),
+        (OperationKind.EXCLUDE, r"^(.+?)\s+(?:isn['’]?t|is\s+not)\s+(?:really\s+)?my\s+thing$"),
         (OperationKind.EXCLUDE, r"\bavoid\s+(.+)$"),
         (OperationKind.EXCLUDE, r"\bexclude\s+(.+)$"),
         (OperationKind.EXCLUDE, r"\bwithout\s+(.+)$"),
         (OperationKind.EXCLUDE, r"\banything\s+but\s+(.+)$"),
-        (OperationKind.EXCLUDE, r"\bnot\s+(.+)$"),
+        # Keep the shorthand "not leather" form, but do not treat every
+        # product-benefit sentence containing "not" (for example, "will not
+        # change color") as a user exclusion.
+        (OperationKind.EXCLUDE, r"^\s*not\s+(.+)$"),
         (OperationKind.SET, r"\b(?:for\s+that,?\s+)?what\s+(?:i\s+)?need\s+is\s*:?\s*(.+)$"),
         (OperationKind.SET, r"\bwhat\s+matters\s+is\s*:?\s*(.+)$"),
         (OperationKind.SET, r"\ba\s+key\s+requirement\s+is\s*:?\s*(.+)$"),
         (OperationKind.SET, r"\b(?:want|prefer|need)\s+(.+)$"),
+        (OperationKind.SET, r"\b(?:also\s+)?(?:like|would\s+like)\s+(.+)$"),
         (OperationKind.SET, r"\bmake\s+it\s+(.+)$"),
         (OperationKind.SET, r"\bswitch\s+to\s+(.+)$"),
     )
@@ -607,7 +746,14 @@ def _parse_clause(
             continue
         raw = match.group(1)
         if kind is OperationKind.EXCLUDE:
-            if _is_non_exclusion_negation(clause) or _is_incomplete_negative_value(raw):
+            explicit_negative_preference = bool(re.search(
+                r"\b(?:do\s+not|don['’]?t)\s+really\s+want\b|"
+                r"\bnot\s+(?:really\s+)?(?:keen\s+on|a\s+fan\s+of)\b|"
+                r"\b(?:isn['’]?t|is\s+not)\s+(?:really\s+)?my\s+thing\b",
+                clause,
+                re.IGNORECASE,
+            ))
+            if (_is_non_exclusion_negation(clause) and not explicit_negative_preference) or _is_incomplete_negative_value(raw):
                 if _POSITIVE_CUE_RE.search(clause):
                     continue
                 return (), ()
@@ -623,6 +769,8 @@ def _parse_clause(
                 explicit_slot,
             )
         operations = _operation(kind, typed)
+        if kind is OperationKind.SET:
+            operations = _preserve_existing_for_additive_set(clause, operations, active_slots)
         return operations, _positive_context(clause, operations)
 
     suffix_match = re.search(r"^(.+?)\s+(?:instead|rather\s+than)\s*$", clause, re.IGNORECASE)
@@ -651,6 +799,53 @@ def _parse_implicit_clause(
         return (), ()
 
     operations: list[SlotOperation] = []
+    initial_preference = re.search(
+        r"\bfor\s+now\s*,?\s+i['’]?m\s+considering\s+(?P<category>.+?)\s+with\s+this\s+preference\s*:\s*(?P<value>.+)$",
+        clause,
+        re.IGNORECASE,
+    )
+    if not initial_preference:
+        initial_preference = re.search(
+            r"\bi\s+want\s+to\s+browse\s+(?P<category>.+?)\s*;\s*initially\s*,?\s*keep\s+this\s+in\s+mind\s*:\s*(?P<value>.+)$",
+            clause,
+            re.IGNORECASE,
+        )
+    if not initial_preference:
+        initial_preference = re.search(
+            r"\bhelp\s+me\s+find\s+(?P<category>.+?)\.\s*at\s+the\s+moment\s*,?\s*i\s+prefer\s+(?P<value>.+)$",
+            clause,
+            re.IGNORECASE,
+        )
+    if initial_preference:
+        category = _clean_value(initial_preference.group("category"))
+        value = _clean_value(initial_preference.group("value"))
+        if category:
+            operations.append(SlotOperation(OperationKind.SET, "category", (category,)))
+        if value:
+            operations.append(SlotOperation(OperationKind.SET, "feature", (value,)))
+        operation_tuple = tuple(operations)
+        return operation_tuple, _positive_context(clause, operation_tuple)
+
+    initial_category = re.search(
+        r"\b(?:i['’]?m\s+considering|i\s+want\s+to\s+browse|help\s+me\s+find)\s+(?P<category>.+?)(?=\s+with\s+this\s+preference\s*:|$)",
+        clause,
+        re.IGNORECASE,
+    )
+    if initial_category:
+        category = _clean_value(initial_category.group("category"))
+        if category:
+            operations.append(SlotOperation(OperationKind.SET, "category", (category,)))
+
+    initial_value = re.search(
+        r"\b(?:with\s+this\s+preference\s*:|initially\s*,?\s*keep\s+this\s+in\s+mind\s*:|at\s+the\s+moment\s*,?\s*i\s+prefer)\s*(?P<value>.+)$",
+        clause,
+        re.IGNORECASE,
+    )
+    if initial_value:
+        value = _clean_value(initial_value.group("value"))
+        if value:
+            operations.append(SlotOperation(OperationKind.SET, "feature", (value,)))
+
     category_match = re.search(
         r"\b(?:looking|shopping)\s+for\s+(.+?)(?=\s+(?:with|under|below|but|however)\b|,|$)",
         clause,
@@ -723,6 +918,15 @@ def _parse_implicit_clause(
             operations.append(SlotOperation(OperationKind.SET, "budget", (budget,)))
 
     # Stable seed values preserve the pre-existing lightweight parser behavior.
+    # Never turn an unhandled negative sentence into a positive preference just
+    # because it contains a known catalog seed such as ``leather``.
+    if re.search(
+        r"\b(?:do\s+not|don['’]?t|not|never|avoid|exclude|without|stay\s+away)\b",
+        clause,
+        re.IGNORECASE,
+    ) and not operations:
+        return (), ()
+
     known = (
         (MATERIALS, "material"),
         (COLORS, "color"),
@@ -761,8 +965,8 @@ def parse_turn(
         payload_delta = parse_turn(
             user_message=payload_clause,
             pending_attribute=None,
-            active_slots=active_slots,
-            negative_slots=negative_slots,
+            active_slots={},
+            negative_slots={},
         )
         return TurnDelta(
             operations=payload_delta.operations,
@@ -872,13 +1076,25 @@ def apply_operations(state: SessionState, delta: TurnDelta) -> bool:
         for attribute in state.no_preference_attributes
     }
 
+    set_slots_seen: set[str] = set()
     for operation in delta.operations:
         slot = _canonical_slot(operation.slot) or operation.slot
         values = tuple(_unique_state_values(operation.values))
         if operation.kind is OperationKind.SET:
             if not values:
                 continue
-            state.active_slots[slot] = list(values)
+            if slot == "other" and not delta.explicit_reference_override:
+                state.active_slots[slot] = _unique_state_values(
+                    [*state.active_slots.get(slot, []), *values]
+                )
+                set_slots_seen.add(slot)
+            elif slot in set_slots_seen:
+                state.active_slots[slot] = _unique_state_values(
+                    [*state.active_slots.get(slot, []), *values]
+                )
+            else:
+                state.active_slots[slot] = list(values)
+                set_slots_seen.add(slot)
             state.negative_slots[slot] = _remove_values(state.negative_slots.get(slot, []), set(values))
             if not state.negative_slots[slot]:
                 state.negative_slots.pop(slot, None)
@@ -908,7 +1124,10 @@ def apply_operations(state: SessionState, delta: TurnDelta) -> bool:
             if not state.negative_slots.get(slot):
                 state.negative_slots.pop(slot, None)
         elif operation.kind is OperationKind.DONTCARE:
-            state.active_slots.pop(slot, None)
+            # "No additional preference" closes an open-ended question; it
+            # does not cancel evidence disclosed in earlier turns.
+            if slot != "other":
+                state.active_slots.pop(slot, None)
             state.negative_slots.pop(slot, None)
             state.no_preference_attributes.add(slot)
 

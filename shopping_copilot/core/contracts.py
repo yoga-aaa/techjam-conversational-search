@@ -43,7 +43,9 @@ class SessionState:
     excluded_terms: set[str] = field(default_factory=set)
     no_preference_attributes: set[str] = field(default_factory=set)
     asked_attributes: list[str] = field(default_factory=list)
+    asked_attribute_counts: dict[str, int] = field(default_factory=dict)
     pending_attribute: str | None = None
+    last_turn_explicit_override: bool = False
     messages: list[str] = field(default_factory=list)
     active_context: list[str] = field(default_factory=list)
     question_scores: dict[str, float] = field(default_factory=dict)
@@ -54,6 +56,7 @@ class SessionState:
     stagnant_candidate_turns: int = 0
     coverage_mode: bool = False
     supersedable_preference: SupersedablePreference | None = None
+    explicit_override_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -74,6 +77,7 @@ class SearchPlan:
     use_dense: bool
     use_structured: bool
     diversity_enabled: bool
+    has_explicit_override: bool = False
 
 
 @dataclass(frozen=True)

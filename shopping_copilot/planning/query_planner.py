@@ -28,7 +28,14 @@ class RuleQueryPlanner:
 
     def build(self, state: SessionState) -> SearchPlan:
         terms: list[str] = []
-        for values in state.active_slots.values():
+        budget_tokens = {
+            token
+            for value in state.active_slots.get("budget", ())
+            for token in normalized_tokens(value)
+        }
+        for attribute, values in state.active_slots.items():
+            if self.config.query_hygiene_enabled and attribute == "budget":
+                continue
             for value in values:
                 terms.extend(
                     token
@@ -39,7 +46,12 @@ class RuleQueryPlanner:
             terms.extend(
                 token.lower()
                 for token in normalized_tokens(text)
-                if len(token) > 1 and token not in STOPWORDS
+                if len(token) > 1
+                and token not in STOPWORDS
+                and not (
+                    self.config.query_hygiene_enabled
+                    and (token in {"still", "exploring"} or token in budget_tokens)
+                )
             )
 
         excluded_values = {
@@ -60,12 +72,10 @@ class RuleQueryPlanner:
         ][:40]
         route = state.intent_mode if state.intent_mode in {"buying", "browsing"} else "browsing"
 
+        # Budget is deliberately kept out of retrieval filters. Prices can be
+        # missing or stale in the catalog, so the ranker treats budget as a
+        # soft preference after candidates have been recalled.
         hard_filters: dict[str, object] = {}
-        if state.active_slots.get("budget"):
-            try:
-                hard_filters["price_max"] = float(state.active_slots["budget"][-1])
-            except ValueError:
-                pass
 
         structured_constraints = {
             name: tuple(values)
@@ -95,4 +105,5 @@ class RuleQueryPlanner:
             use_dense=self.config.dense_enabled,
             use_structured=self.config.structured_enabled,
             diversity_enabled=diversity_enabled,
+            has_explicit_override=state.explicit_override_count > 0,
         )

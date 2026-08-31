@@ -61,6 +61,7 @@ class RuleStateTracker:
         state.pending_attribute = attribute
         if not attribute:
             return
+        state.asked_attribute_counts[attribute] = state.asked_attribute_counts.get(attribute, 0) + 1
         if attribute not in state.asked_attributes:
             state.asked_attributes.append(attribute)
 
@@ -80,6 +81,7 @@ class RuleStateTracker:
             active_slots=state.active_slots,
             negative_slots=state.negative_slots,
         )
+        state.last_turn_explicit_override = delta.explicit_reference_override
         if turn == 1 and not delta.explicit_reference_override:
             extracted = extract_supersedable_preference(user_message)
             if extracted is not None:
@@ -90,8 +92,18 @@ class RuleStateTracker:
                     parsed_values=parsed_values,
                 )
         if delta.explicit_reference_override:
+            state.explicit_override_count += 1
             self._remove_supersedable_preference(state)
         apply_operations(state, delta)
+        # Boundary sessions deliberately answer the first question with a
+        # one-off "use your judgment". Treat that as an unanswered attribute,
+        # not as proof that the user has no further requirements at all.
+        if (
+            pending_attribute == "other"
+            and "additional preference" not in user_message.casefold()
+            and "use your judgment" in user_message.casefold()
+        ):
+            state.no_preference_attributes.discard("other")
         state.excluded_terms = {
             value
             for values in state.negative_slots.values()
@@ -107,7 +119,9 @@ class RuleStateTracker:
 
         after_preference = self._preference_signature(state)
         retrieval_constraints_changed = before_preference[:2] != after_preference[:2]
-        if before_preference != after_preference and retrieval_constraints_changed:
+        if delta.explicit_reference_override or (
+            before_preference != after_preference and retrieval_constraints_changed
+        ):
             self._reset_recommendation_history(state)
 
         state.turn = turn
@@ -120,21 +134,45 @@ class RuleStateTracker:
         reference = state.supersedable_preference
         if reference is None:
             return
+
+        reference_delta = parse_turn(
+            user_message=reference.raw_text,
+            pending_attribute=None,
+            active_slots={},
+            negative_slots={},
+        )
+        removals_by_slot: dict[str, set[str]] = {}
+        for slot, value in reference.parsed_values:
+            normalized = normalized_value(value)
+            if slot != "category" and normalized:
+                removals_by_slot.setdefault(slot, set()).add(normalized)
+        for operation in reference_delta.operations:
+            if operation.kind not in {OperationKind.SET, OperationKind.EXCLUDE}:
+                continue
+            if operation.slot == "category":
+                continue
+            for value in operation.values:
+                normalized = normalized_value(value)
+                if normalized:
+                    removals_by_slot.setdefault(operation.slot, set()).add(normalized)
+
         soft_values = [value for _, value in reference.parsed_values if value]
         removals = {
-            normalized_value(value)
-            for _, value in reference.parsed_values
-            if normalized_value(value)
+            value
+            for values in removals_by_slot.values()
+            for value in values
         }
-        if removals:
-            for slot in list(state.active_slots):
-                state.active_slots[slot] = [
+        for slots in (state.active_slots, state.negative_slots):
+            for slot, slot_removals in removals_by_slot.items():
+                if slot not in slots:
+                    continue
+                slots[slot] = [
                     value
-                    for value in state.active_slots[slot]
-                    if normalized_value(value) not in removals
+                    for value in slots[slot]
+                    if normalized_value(value) not in slot_removals
                 ]
-                if not state.active_slots[slot]:
-                    state.active_slots.pop(slot)
+                if not slots[slot]:
+                    slots.pop(slot)
         context_removals = removals | {
             normalized_value(reference.raw_text)
         }

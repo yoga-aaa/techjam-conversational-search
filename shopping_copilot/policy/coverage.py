@@ -70,8 +70,8 @@ class CandidateCoverageManager:
         state.previous_candidate_ids = current_ids
         state.previous_slot_signature = slot_signature
 
-    @staticmethod
     def order_for_response(
+        self,
         state: SessionState,
         ranked: Sequence[RankedCandidate],
     ) -> list[RankedCandidate]:
@@ -79,6 +79,40 @@ class CandidateCoverageManager:
             return list(ranked)
         unseen = [item for item in ranked if item.parent_asin not in state.shown_asins]
         previously_shown = [item for item in ranked if item.parent_asin in state.shown_asins]
+        quota = self.config.coverage_override_zero_consensus_quota
+        if (
+            quota > 0
+            and state.explicit_override_count > 0
+            and state.stagnant_candidate_turns >= self.config.coverage_override_balance_min_stagnant
+        ):
+            width = min(self.config.coverage_slate_width, len(unseen))
+            quota = min(quota, width)
+            head = unseen[: width - quota]
+            head_ids = {item.parent_asin for item in head}
+            zero_consensus = [
+                item
+                for item in unseen
+                if item.parent_asin not in head_ids
+                and float(item.component_scores.get("route_consensus", 0.0)) <= 0.0
+            ][:quota]
+            selected_ids = head_ids | {item.parent_asin for item in zero_consensus}
+            remainder = [item for item in unseen if item.parent_asin not in selected_ids]
+            return [*head, *zero_consensus, *remainder, *previously_shown]
+        if self.config.coverage_stratified_enabled:
+            width = min(self.config.coverage_slate_width, len(unseen))
+            head_count = min(self.config.coverage_head_count, width)
+            head = unseen[:head_count]
+            tail = unseen[head_count:]
+            sample_count = width - head_count
+            if sample_count > 0 and len(tail) > sample_count:
+                indices = [
+                    min(len(tail) - 1, ((index + 1) * len(tail) // (sample_count + 1)))
+                    for index in range(sample_count)
+                ]
+                selected = [tail[index] for index in dict.fromkeys(indices)]
+                selected_ids = {item.parent_asin for item in selected}
+                remainder = [item for item in tail if item.parent_asin not in selected_ids]
+                return [*head, *selected, *remainder, *previously_shown]
         return unseen + previously_shown
 
     @staticmethod

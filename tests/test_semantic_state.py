@@ -1,16 +1,63 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 
 from shopping_copilot.core.config import load_config
-from shopping_copilot.core.contracts import RankedCandidate
+from shopping_copilot.core.contracts import RankedCandidate, SessionState
 from shopping_copilot.planning.query_planner import RuleQueryPlanner
 from shopping_copilot.policy.coverage import CandidateCoverageManager
 from shopping_copilot.state.rule_state import RuleStateTracker
-from shopping_copilot.state.semantic_delta import OperationKind, parse_price_value, parse_turn
+from shopping_copilot.state.semantic_delta import OperationKind, apply_operations, parse_price_value, parse_turn
 
 
 class SemanticStateTest(unittest.TestCase):
+    def test_open_ended_values_preserve_previous_evidence(self) -> None:
+        state = SessionState("same-turn", active_slots={"other": ["old value"]})
+
+        delta = parse_turn(
+            "For that, what matters is: machine washable; lightweight.",
+            pending_attribute="other",
+            active_slots=state.active_slots,
+            negative_slots=state.negative_slots,
+        )
+        apply_operations(state, delta)
+
+        self.assertEqual(
+            state.active_slots["other"],
+            ["old value", "machine washable", "lightweight"],
+        )
+
+    def test_open_ended_evidence_accumulates_across_turns_and_survives_drain(self) -> None:
+        state = SessionState("evidence")
+        first = parse_turn(
+            "For that, what matters is: machine washable; lightweight.",
+            pending_attribute="other",
+            active_slots=state.active_slots,
+            negative_slots=state.negative_slots,
+        )
+        apply_operations(state, first)
+        second = parse_turn(
+            "For that, what matters is: waterproof.",
+            pending_attribute="other",
+            active_slots=state.active_slots,
+            negative_slots=state.negative_slots,
+        )
+        apply_operations(state, second)
+        drained = parse_turn(
+            "I don't have an additional preference for other.",
+            pending_attribute="other",
+            active_slots=state.active_slots,
+            negative_slots=state.negative_slots,
+        )
+        apply_operations(state, drained)
+
+        self.assertEqual(
+            state.active_slots["other"],
+            ["machine washable", "lightweight", "waterproof"],
+        )
+        self.assertIn("other", state.no_preference_attributes)
+
     def setUp(self) -> None:
         self.tracker = RuleStateTracker()
         self.tracker.reset("semantic", {})
@@ -146,9 +193,16 @@ class SemanticStateTest(unittest.TestCase):
             "I'm not sure about color.",
             "Not necessarily waterproof.",
             "Not too expensive.",
+            "The earrings will not change color and can be worn in water.",
         ):
             state = self.update(message)
             self.assertEqual(state.negative_slots, {}, message)
+
+    def test_bare_not_shorthand_remains_an_exclusion(self) -> None:
+        self.tracker.mark_asked("semantic", "material")
+        state = self.update("Not leather.")
+
+        self.assertEqual(state.negative_slots, {"material": ["leather"]})
 
     def test_positive_context_does_not_keep_control_words_or_stale_value(self) -> None:
         state = self.update("I'm looking for shoes with leather material.")
@@ -203,6 +257,22 @@ class SemanticStateTest(unittest.TestCase):
         self.assertIn("cotton", plan.lexical_terms)
         self.assertIn("shoes", plan.lexical_terms)
         self.assertNotIn("leather", plan.lexical_terms)
+
+    def test_query_hygiene_excludes_budget_and_exploration_markers(self) -> None:
+        state = SessionState(
+            "hygiene",
+            active_slots={"category": ["shoes"], "budget": ["80"]},
+            active_context=["still exploring around 80"],
+        )
+        base_config = load_config("configs/final.json")
+        search_config = replace(base_config.search, query_hygiene_enabled=True)
+
+        plan = RuleQueryPlanner(search_config).build(state)
+
+        self.assertIn("shoes", plan.lexical_terms)
+        self.assertNotIn("80", plan.lexical_terms)
+        self.assertNotIn("still", plan.lexical_terms)
+        self.assertNotIn("exploring", plan.lexical_terms)
         self.assertNotIn("leather", plan.semantic_query.split())
 
     def test_official_reference_override_removes_old_value_and_ignores_pending(self) -> None:
@@ -222,6 +292,163 @@ class SemanticStateTest(unittest.TestCase):
         self.assertNotIn("budget", state.active_slots)
         self.assertNotIn("ignore my earlier preference", " ".join(state.active_context))
         self.assertIn("waterproof", " ".join(state.active_context))
+        self.assertEqual(state.explicit_override_count, 1)
+        plan = RuleQueryPlanner(load_config("configs/final.json").search).build(state)
+        self.assertTrue(plan.has_explicit_override)
+
+    def test_reference_override_clears_old_negative_and_preserves_unrelated_state(self) -> None:
+        tracker = RuleStateTracker()
+        tracker.reset("negative-override", {})
+        state = tracker.update(
+            "negative-override",
+            "I'm looking for shoes under $80. Easy to use without wiggling.",
+            1,
+        )
+        state.active_slots["other"] = ["comfortable"]
+        state.negative_slots["other"].append("clunky")
+
+        state = tracker.update(
+            "negative-override",
+            "Actually, ignore my earlier preference. What I need is: polyester.",
+            3,
+        )
+
+        self.assertTrue(state.last_turn_explicit_override)
+        self.assertEqual(state.active_slots["category"], ["shoes"])
+        self.assertEqual(state.active_slots["budget"], ["80"])
+        self.assertEqual(state.active_slots["material"], ["polyester"])
+        self.assertEqual(state.active_slots["other"], ["comfortable"])
+        self.assertEqual(state.negative_slots["other"], ["clunky"])
+        self.assertNotIn("wiggling", state.excluded_terms)
+        self.assertIn("clunky", state.excluded_terms)
+
+        state = tracker.update("negative-override", "I also want durable.", 4)
+        self.assertFalse(state.last_turn_explicit_override)
+
+    def test_override_payload_uses_its_own_slot_seed(self) -> None:
+        state = SessionState(
+            "payload-slot",
+            active_slots={"other": ["100% leather", "buckle closure"]},
+            negative_slots={"other": ["old negative"]},
+        )
+
+        delta = parse_turn(
+            "Actually, ignore my earlier preference. What I need is: polyester.",
+            pending_attribute="budget",
+            active_slots=state.active_slots,
+            negative_slots=state.negative_slots,
+        )
+        apply_operations(state, delta)
+
+        self.assertEqual(len(delta.operations), 1)
+        self.assertEqual(delta.operations[0].kind, OperationKind.SET)
+        self.assertEqual(delta.operations[0].slot, "material")
+        self.assertEqual(delta.operations[0].values, ("polyester",))
+        self.assertEqual(state.active_slots["material"], ["polyester"])
+        self.assertEqual(state.active_slots["other"], ["100% leather", "buckle closure"])
+        self.assertEqual(state.negative_slots["other"], ["old negative"])
+
+    def test_positive_wrapper_does_not_turn_embedded_without_into_exclude(self) -> None:
+        tracker = RuleStateTracker()
+        tracker.reset("positive-wrapper", {})
+
+        state = tracker.update(
+            "positive-wrapper",
+            "For that, what matters is: easy to use without wiggling.",
+            1,
+        )
+
+        self.assertEqual(state.active_slots["feature"], ["easy to use without wiggling"])
+        self.assertEqual(state.negative_slots, {})
+        self.assertNotIn("wiggling", state.excluded_terms)
+
+    def test_standalone_without_remains_an_exclusion(self) -> None:
+        tracker = RuleStateTracker()
+        tracker.reset("standalone-without", {})
+
+        state = tracker.update("standalone-without", "I want shoes without leather.", 1)
+
+        self.assertEqual(state.negative_slots, {"material": ["leather"]})
+        self.assertEqual(state.excluded_terms, {"leather"})
+
+    def test_reference_override_clears_old_negative_and_preserves_unrelated_state(self) -> None:
+        tracker = RuleStateTracker()
+        tracker.reset("negative-override", {})
+        state = tracker.update(
+            "negative-override",
+            "I'm looking for shoes under $80. Easy to use without wiggling.",
+            1,
+        )
+        state.active_slots["other"] = ["comfortable"]
+        state.negative_slots["other"].append("clunky")
+
+        state = tracker.update(
+            "negative-override",
+            "Actually, ignore my earlier preference. What I need is: polyester.",
+            3,
+        )
+
+        self.assertTrue(state.last_turn_explicit_override)
+        self.assertEqual(state.active_slots["category"], ["shoes"])
+        self.assertEqual(state.active_slots["budget"], ["80"])
+        self.assertEqual(state.active_slots["material"], ["polyester"])
+        self.assertEqual(state.active_slots["other"], ["comfortable"])
+        self.assertEqual(state.negative_slots["other"], ["clunky"])
+        self.assertNotIn("wiggling", state.excluded_terms)
+        self.assertIn("clunky", state.excluded_terms)
+
+        state = tracker.update(
+            "negative-override",
+            "I also want durable.",
+            4,
+        )
+        self.assertFalse(state.last_turn_explicit_override)
+
+    def test_override_payload_uses_its_own_slot_seed(self) -> None:
+        state = SessionState(
+            "payload-slot",
+            active_slots={"other": ["100% leather", "buckle closure"]},
+            negative_slots={"other": ["old negative"]},
+        )
+
+        delta = parse_turn(
+            "Actually, ignore my earlier preference. What I need is: polyester.",
+            pending_attribute="budget",
+            active_slots=state.active_slots,
+            negative_slots=state.negative_slots,
+        )
+        apply_operations(state, delta)
+
+        self.assertEqual(len(delta.operations), 1)
+        self.assertEqual(delta.operations[0].kind, OperationKind.SET)
+        self.assertEqual(delta.operations[0].slot, "material")
+        self.assertEqual(delta.operations[0].values, ("polyester",))
+        self.assertEqual(state.active_slots["material"], ["polyester"])
+        self.assertEqual(state.active_slots["other"], ["100% leather", "buckle closure"])
+        self.assertEqual(state.negative_slots["other"], ["old negative"])
+
+    def test_positive_wrapper_does_not_turn_embedded_without_into_exclude(self) -> None:
+        tracker = RuleStateTracker()
+        tracker.reset("positive-wrapper", {})
+
+        state = tracker.update(
+            "positive-wrapper",
+            "For that, what matters is: easy to use without wiggling.",
+            1,
+        )
+
+        self.assertEqual(state.active_slots["feature"], ["easy to use without wiggling"])
+        self.assertEqual(state.negative_slots, {})
+        self.assertNotIn("wiggling", state.excluded_terms)
+
+    def test_standalone_without_remains_an_exclusion(self) -> None:
+        tracker = RuleStateTracker()
+        tracker.reset("standalone-without", {})
+
+        state = tracker.update("standalone-without", "I want shoes without leather.", 1)
+
+        self.assertEqual(state.negative_slots, {"material": ["leather"]})
+        self.assertEqual(state.excluded_terms, {"leather"})
 
     def test_non_price_pending_answer_is_not_budget(self) -> None:
         tracker = RuleStateTracker()
@@ -255,6 +482,96 @@ class SemanticStateTest(unittest.TestCase):
                 ("~size", ()),
             ),
         )
+
+    def test_stratified_coverage_preserves_head_and_samples_deeper_ranks(self) -> None:
+        policy_config = replace(
+            load_config("configs/final.json").policy,
+            coverage_stratified_enabled=True,
+            coverage_head_count=3,
+            coverage_slate_width=10,
+        )
+        manager = CandidateCoverageManager(policy_config)
+        state = SessionState("stratified", coverage_mode=True)
+        ranked = [RankedCandidate(str(index), float(100 - index), {}) for index in range(30)]
+
+        ordered = manager.order_for_response(state, ranked)
+        first_slate = [item.parent_asin for item in ordered[:10]]
+
+        self.assertEqual(first_slate[:3], ["0", "1", "2"])
+        self.assertEqual(len(first_slate), len(set(first_slate)))
+        self.assertGreater(max(map(int, first_slate)), 20)
+
+    def test_override_coverage_reserves_zero_consensus_candidates_after_stagnation(self) -> None:
+        manager = CandidateCoverageManager(load_config("configs/experiments/e27_override_balanced_coverage.json").policy)
+        state = SessionState(
+            "override-balance",
+            coverage_mode=True,
+            explicit_override_count=1,
+            stagnant_candidate_turns=2,
+        )
+        ranked = [
+            RankedCandidate(
+                str(index),
+                float(100 - index),
+                {"route_consensus": 1.0 if index < 20 else 0.0},
+            )
+            for index in range(30)
+        ]
+
+        ordered = manager.order_for_response(state, ranked)
+        first_slate = ordered[:10]
+
+        self.assertEqual([item.parent_asin for item in first_slate[:7]], [str(index) for index in range(7)])
+        self.assertEqual(
+            [item.parent_asin for item in first_slate[7:]],
+            ["20", "21", "22"],
+        )
+
+    def test_natural_no_preference_paraphrases_do_not_pollute_slots(self) -> None:
+        cases = (
+            ("I'm flexible about color.", "color"),
+            ("I have no strong opinion on size.", "size"),
+            ("There is no particular material I need.", "material"),
+            ("The other requirement doesn't really matter to me.", "other"),
+        )
+        for message, slot in cases:
+            with self.subTest(message=message):
+                state = SessionState(message)
+                apply_operations(state, parse_turn(message, slot, state.active_slots, state.negative_slots))
+                self.assertNotIn(slot, state.active_slots)
+                self.assertIn(slot, state.no_preference_attributes)
+
+    def test_contextual_open_reply_preserves_comma_bearing_catalog_value(self) -> None:
+        state = SessionState("open-wrapper")
+        delta = parse_turn(
+            "The option I have in mind is spandex and 65% Spandex, 35% Polyester.",
+            "other",
+            state.active_slots,
+            state.negative_slots,
+        )
+        apply_operations(state, delta)
+        self.assertEqual(state.active_slots["other"], ["spandex", "65% spandex, 35% polyester"])
+
+    def test_additive_preference_preserves_existing_value_but_switch_replaces(self) -> None:
+        state = SessionState("additive")
+        apply_operations(state, parse_turn("I prefer black.", None, state.active_slots, state.negative_slots))
+        apply_operations(state, parse_turn("I also like blue.", None, state.active_slots, state.negative_slots))
+        self.assertEqual(state.active_slots["color"], ["black", "blue"])
+        apply_operations(state, parse_turn("Switch to red.", None, state.active_slots, state.negative_slots))
+        self.assertEqual(state.active_slots["color"], ["red"])
+
+    def test_natural_negative_phrases_never_become_positive_seeds(self) -> None:
+        for message in (
+            "I do not really want leather.",
+            "I would rather stay away from leather.",
+            "Leather is not really my thing.",
+            "I am not keen on leather.",
+        ):
+            with self.subTest(message=message):
+                state = SessionState(message)
+                apply_operations(state, parse_turn(message, None, state.active_slots, state.negative_slots))
+                self.assertNotIn("leather", state.active_slots.get("material", []))
+                self.assertIn("leather", state.negative_slots.get("material", []))
 
 
 if __name__ == "__main__":

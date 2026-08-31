@@ -52,6 +52,8 @@ class HeuristicPolicy:
         plan: SearchPlan,
         diagnostics: RetrievalDiagnostics,
     ) -> PolicyDecision | None:
+        if state.last_turn_explicit_override:
+            return None
         if state.turn >= 10:
             return None
 
@@ -63,7 +65,7 @@ class HeuristicPolicy:
         if not over_general:
             return None
 
-        attribute = self._select_fixed_attribute(state, plan.route)
+        attribute = self._select_other_first(state) or self._select_fixed_attribute(state, plan.route)
         if attribute is None:
             return None
         return PolicyDecision(
@@ -89,12 +91,24 @@ class HeuristicPolicy:
             attribute = self._select_attribute(state, plan.route, ranked)
             if attribute is None:
                 return PolicyDecision(False, None, "Here are my best matches.", 10)
-            return PolicyDecision(
+            decision = PolicyDecision(
                 should_ask=True,
                 ask_attribute=attribute,
                 message=QUESTION_TEMPLATES[attribute],
                 recommendation_count=early_decision.recommendation_count,
             )
+            return self._apply_slate_gate(state, ranked, decision)
+
+        other_first = self._select_other_first(state)
+        if other_first is not None:
+            state.question_scores = {"other": 1.0}
+            decision = PolicyDecision(
+                should_ask=True,
+                ask_attribute=other_first,
+                message=QUESTION_TEMPLATES[other_first],
+                recommendation_count=self.policy_config.uncertain_recommendation_count,
+            )
+            return self._apply_slate_gate(state, ranked, decision)
 
         if len(ranked) >= 2:
             score_gap = ranked[0].final_score - ranked[1].final_score
@@ -111,11 +125,45 @@ class HeuristicPolicy:
         attribute = self._select_attribute(state, plan.route, ranked)
         if attribute is None:
             return PolicyDecision(False, None, "Here are my best matches.", 10)
-        return PolicyDecision(
+        decision = PolicyDecision(
             should_ask=True,
             ask_attribute=attribute,
             message=QUESTION_TEMPLATES[attribute],
             recommendation_count=self.policy_config.uncertain_recommendation_count,
+        )
+        return self._apply_slate_gate(state, ranked, decision)
+
+    def _apply_slate_gate(
+        self,
+        state: SessionState,
+        ranked: Sequence[RankedCandidate],
+        decision: PolicyDecision,
+    ) -> PolicyDecision:
+        """Keep the visible slate compact until enough evidence supports expansion."""
+
+        if not self.policy_config.slate_gate_enabled or not decision.should_ask:
+            return decision
+        leader_matches = (
+            int(ranked[0].component_scores.get("matched_product_constraint_count", 0.0))
+            if ranked
+            else 0
+        )
+        requirements_drained = "other" in state.no_preference_attributes
+        enough_evidence = (
+            state.turn >= self.policy_config.slate_expand_min_turn
+            and leader_matches >= self.policy_config.slate_expand_min_matches
+        )
+        forced_expansion = state.turn >= self.policy_config.slate_expand_turn
+        recommendation_count = (
+            decision.recommendation_count
+            if requirements_drained or enough_evidence or forced_expansion
+            else min(decision.recommendation_count, self.policy_config.slate_compact_count)
+        )
+        return PolicyDecision(
+            should_ask=decision.should_ask,
+            ask_attribute=decision.ask_attribute,
+            message=decision.message,
+            recommendation_count=recommendation_count,
         )
 
     def _select_attribute(
@@ -124,6 +172,10 @@ class HeuristicPolicy:
         route: str,
         ranked: Sequence[RankedCandidate],
     ) -> str | None:
+        other_first = self._select_other_first(state)
+        if other_first is not None:
+            state.question_scores = {"other": 1.0}
+            return other_first
         explicit_exploration = any(
             marker in message.lower()
             for message in state.messages
@@ -154,6 +206,16 @@ class HeuristicPolicy:
         else:
             state.question_scores = {}
         return self._select_fixed_attribute(state, route)
+
+    def _select_other_first(self, state: SessionState) -> str | None:
+        if not self.policy_config.other_first_enabled:
+            return None
+        if "other" in state.no_preference_attributes:
+            return None
+        asked = state.asked_attribute_counts.get("other", 0)
+        if asked >= self.policy_config.other_first_max_questions:
+            return None
+        return "other"
 
     @staticmethod
     def _select_fixed_attribute(state: SessionState, route: str) -> str | None:

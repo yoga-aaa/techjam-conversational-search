@@ -67,6 +67,7 @@ class ShoppingCopilotAgent:
         if (
             early_decision is not None
             and self.config.policy.question_strategy == "information_gain"
+            and not self.config.policy.global_response_ranking
         ):
             response_candidate_count = max(10, decision.recommendation_count)
             response_result = replace(

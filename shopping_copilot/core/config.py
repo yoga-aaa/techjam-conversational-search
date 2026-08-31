@@ -13,6 +13,15 @@ class SearchConfig:
     probe_overload_threshold: int
     dense_enabled: bool
     structured_enabled: bool
+    category_anchor_enabled: bool
+    category_anchor_full_pool: bool
+    lexical_multiquery_enabled: bool
+    lexical_multiquery_override_only: bool
+    lexical_max_variants: int
+    lexical_fetch_multiplier: int
+    lexical_rrf_k: float
+    lexical_preserve_broad_score: bool
+    query_hygiene_enabled: bool
 
 
 @dataclass(frozen=True)
@@ -31,6 +40,19 @@ class PolicyConfig:
     coverage_overlap_threshold: float
     coverage_min_turn: int
     coverage_stagnant_turns: int
+    coverage_stratified_enabled: bool
+    coverage_head_count: int
+    coverage_slate_width: int
+    coverage_override_zero_consensus_quota: int
+    coverage_override_balance_min_stagnant: int
+    other_first_enabled: bool
+    other_first_max_questions: int
+    slate_gate_enabled: bool
+    slate_compact_count: int
+    slate_expand_min_turn: int
+    slate_expand_min_matches: int
+    slate_expand_turn: int
+    global_response_ranking: bool
 
 
 @dataclass(frozen=True)
@@ -40,6 +62,22 @@ class RankingConfig:
     constraint_weight_step: float
     maximum_constraint_weight: float
     rarity_weighting: bool
+    specificity_weighting: bool
+    specificity_weight_step: float
+    all_constraints_bonus: float
+    exact_base_weight: float
+    exact_token_weight: float
+    exact_unmatched_penalty: float
+    exact_all_match_bonus: float
+    exact_anchor_bonus: float
+    soft_budget_as_cap: bool
+    evidence_lexical_weight: float
+    evidence_candidate_constraint_weight: float
+    evidence_profile_weight: float
+    popularity_rating_weight: float
+    popularity_count_weight: float
+    evidence_route_consensus_weight: float
+    evidence_field_token_fallback: bool
 
 
 @dataclass(frozen=True)
@@ -84,6 +122,39 @@ def load_config(path: str | Path | None = None) -> AppConfig:
                 min(1.0, float(ranking.get("maximum_constraint_weight", 0.55))),
             ),
             rarity_weighting=bool(ranking.get("rarity_weighting", False)),
+            specificity_weighting=bool(ranking.get("specificity_weighting", False)),
+            specificity_weight_step=max(
+                0.0,
+                float(ranking.get("specificity_weight_step", 0.12)),
+            ),
+            all_constraints_bonus=max(0.0, float(ranking.get("all_constraints_bonus", 0.0))),
+            exact_base_weight=max(0.0, float(ranking.get("exact_base_weight", 0.8))),
+            exact_token_weight=max(0.0, float(ranking.get("exact_token_weight", 0.55))),
+            exact_unmatched_penalty=max(
+                0.0,
+                float(ranking.get("exact_unmatched_penalty", 0.35)),
+            ),
+            exact_all_match_bonus=max(
+                0.0,
+                float(ranking.get("exact_all_match_bonus", 4.0)),
+            ),
+            exact_anchor_bonus=max(0.0, float(ranking.get("exact_anchor_bonus", 20.0))),
+            soft_budget_as_cap=bool(ranking.get("soft_budget_as_cap", False)),
+            evidence_lexical_weight=max(0.0, float(ranking.get("evidence_lexical_weight", 0.20))),
+            evidence_candidate_constraint_weight=max(
+                0.0,
+                float(ranking.get("evidence_candidate_constraint_weight", 0.10)),
+            ),
+            evidence_profile_weight=max(0.0, float(ranking.get("evidence_profile_weight", 0.10))),
+            popularity_rating_weight=max(0.0, float(ranking.get("popularity_rating_weight", 0.08))),
+            popularity_count_weight=max(0.0, float(ranking.get("popularity_count_weight", 0.05))),
+            evidence_route_consensus_weight=max(
+                0.0,
+                float(ranking.get("evidence_route_consensus_weight", 0.0)),
+            ),
+            evidence_field_token_fallback=bool(
+                ranking.get("evidence_field_token_fallback", False)
+            ),
         ),
         search=SearchConfig(
             implementation=str(search.get("implementation", "hybrid")),
@@ -91,6 +162,17 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             probe_overload_threshold=max(10, int(search.get("probe_overload_threshold", 2000))),
             dense_enabled=bool(search.get("dense_enabled", False)),
             structured_enabled=bool(search.get("structured_enabled", False)),
+            category_anchor_enabled=bool(search.get("category_anchor_enabled", False)),
+            category_anchor_full_pool=bool(search.get("category_anchor_full_pool", False)),
+            lexical_multiquery_enabled=bool(search.get("lexical_multiquery_enabled", False)),
+            lexical_multiquery_override_only=bool(search.get("lexical_multiquery_override_only", False)),
+            lexical_max_variants=max(1, min(5, int(search.get("lexical_max_variants", 5)))),
+            lexical_fetch_multiplier=max(1, int(search.get("lexical_fetch_multiplier", 4))),
+            lexical_rrf_k=max(1.0, float(search.get("lexical_rrf_k", 60.0))),
+            lexical_preserve_broad_score=bool(
+                search.get("lexical_preserve_broad_score", False)
+            ),
+            query_hygiene_enabled=bool(search.get("query_hygiene_enabled", False)),
         ),
         policy=PolicyConfig(
             implementation=str(policy.get("implementation", "heuristic")),
@@ -113,6 +195,25 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             ),
             coverage_min_turn=max(1, int(policy.get("coverage_min_turn", 2))),
             coverage_stagnant_turns=max(1, int(policy.get("coverage_stagnant_turns", 1))),
+            coverage_stratified_enabled=bool(policy.get("coverage_stratified_enabled", False)),
+            coverage_head_count=max(0, int(policy.get("coverage_head_count", 3))),
+            coverage_slate_width=max(1, int(policy.get("coverage_slate_width", 10))),
+            coverage_override_zero_consensus_quota=max(
+                0,
+                int(policy.get("coverage_override_zero_consensus_quota", 0)),
+            ),
+            coverage_override_balance_min_stagnant=max(
+                1,
+                int(policy.get("coverage_override_balance_min_stagnant", 2)),
+            ),
+            other_first_enabled=bool(policy.get("other_first_enabled", False)),
+            other_first_max_questions=max(1, int(policy.get("other_first_max_questions", 3))),
+            slate_gate_enabled=bool(policy.get("slate_gate_enabled", False)),
+            slate_compact_count=max(1, int(policy.get("slate_compact_count", 1))),
+            slate_expand_min_turn=max(1, int(policy.get("slate_expand_min_turn", 3))),
+            slate_expand_min_matches=max(1, int(policy.get("slate_expand_min_matches", 2))),
+            slate_expand_turn=max(1, int(policy.get("slate_expand_turn", 5))),
+            global_response_ranking=bool(policy.get("global_response_ranking", False)),
         ),
         trace=TraceConfig(
             enabled=bool(trace.get("enabled", False)),
@@ -126,7 +227,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
 
     if result.state_implementation != "rule":
         raise ValueError(f"Unsupported state implementation: {result.state_implementation}")
-    if result.ranking.implementation != "heuristic":
+    if result.ranking.implementation not in {"heuristic", "evidence"}:
         raise ValueError(f"Unsupported ranking implementation: {result.ranking.implementation}")
     if result.search.implementation != "hybrid":
         raise ValueError(f"Unsupported search implementation: {result.search.implementation}")
