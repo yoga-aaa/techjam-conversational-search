@@ -123,6 +123,9 @@ class EvidenceRanker:
             if product is None or violates_negative_slots(product, state.negative_slots):
                 continue
             text = self._normalized_text.get(candidate.parent_asin, "")
+            # Score each disclosed requirement independently. Longer phrases
+            # carry more evidence, while missing requirements incur a penalty;
+            # this makes a complete match outrank a merely similar title.
             matched = [
                 constraint
                 for constraint in constraints
@@ -132,6 +135,8 @@ class EvidenceRanker:
             evidence_score -= self.config.exact_unmatched_penalty * (len(constraints) - len(matched))
             all_match = bool(constraints) and len(matched) == len(constraints)
             if all_match:
+                # A product satisfying every active requirement receives a
+                # bounded bonus, rather than relying on lexical score alone.
                 evidence_score += self.config.exact_all_match_bonus
             lexical_score = candidate.lexical_score / max_lexical
             anchor_score = (

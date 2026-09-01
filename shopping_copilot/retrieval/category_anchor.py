@@ -38,6 +38,9 @@ class CategoryAnchorRetriever:
         self._postings: dict[str, list[str]] = defaultdict(list)
         self._last_rank_key: tuple[object, ...] | None = None
         self._last_ranked: list[tuple[str, float]] | None = None
+        # Build the category index once at startup. At inference time this
+        # provides a deterministic same-category candidate route instead of
+        # treating the category name as an ordinary BM25 token.
         for product in store.products:
             anchor = category_anchor(product.categories)
             if anchor:

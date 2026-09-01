@@ -32,12 +32,20 @@ class ShoppingCopilotAgent:
         top_k: int,
     ) -> dict:
         started = perf_counter()
+        # Every turn follows the same order: update current state first, then
+        # plan retrieval from that state. This prevents stale preferences from
+        # leaking into the next query after an explicit user override.
         state = self.components.state_tracker.update(session_id, user_message, turn)
         plan = self.components.planner.build(state)
+
+        # The inexpensive probe lets policy decide whether the request is too
+        # broad for a useful answer before spending the full retrieval budget.
         probe = self.components.retriever.probe(plan)
         early_decision = self.components.policy.before_search(state, plan, probe)
 
         if early_decision is not None:
+            # Clarification turns still produce a small slate, but do not use
+            # dense/structured routes that are unnecessary for the question.
             question_candidate_k = (
                 self.config.policy.question_candidate_limit
                 if self.config.policy.question_strategy == "information_gain"
@@ -55,6 +63,9 @@ class ShoppingCopilotAgent:
         result = self.components.retriever.retrieve(search_plan)
         ranked = self.components.ranker.rank(state, search_plan, result)
         self.components.coverage_manager.observe(state, ranked)
+        # Post-ranking policy chooses both the next question and how many items
+        # are safe to expose. The slate gate keeps weak evidence from looking
+        # like a confident Top-10 answer.
         decision = self.components.policy.after_ranking(
             state,
             search_plan,
@@ -69,6 +80,8 @@ class ShoppingCopilotAgent:
             and self.config.policy.question_strategy == "information_gain"
             and not self.config.policy.global_response_ranking
         ):
+            # For a clarification response, rerank a compact prefix so the
+            # visible items match the same evidence logic as the final slate.
             response_candidate_count = max(10, decision.recommendation_count)
             response_result = replace(
                 result,
@@ -78,6 +91,9 @@ class ShoppingCopilotAgent:
             response_ranked = self.components.ranker.rank(state, response_plan, response_result)
 
         if state.coverage_mode:
+            # If consecutive turns produce nearly the same candidates without
+            # new constraints, bounded unseen-candidate rotation improves
+            # coverage while preserving the ranker's ordering signal.
             response_ranked = self.components.coverage_manager.order_for_response(state, ranked)
 
         self.components.state_tracker.mark_asked(session_id, decision.ask_attribute)

@@ -57,6 +57,9 @@ class CandidateCoverageManager:
             and overlap >= self.config.coverage_overlap_threshold
         )
 
+        # Stagnation means both the requirements and the leading candidate set
+        # stayed stable. A repeated question alone is not enough to activate
+        # coverage rotation.
         if no_new_constraints and stable_candidates:
             state.stagnant_candidate_turns += 1
         else:
@@ -85,6 +88,9 @@ class CandidateCoverageManager:
             and state.explicit_override_count > 0
             and state.stagnant_candidate_turns >= self.config.coverage_override_balance_min_stagnant
         ):
+            # After an override, reserve a small tail for candidates found by
+            # a different route. This is a bounded rescue mechanism, not a
+            # replacement for the evidence ranking order.
             width = min(self.config.coverage_slate_width, len(unseen))
             quota = min(quota, width)
             head = unseen[: width - quota]

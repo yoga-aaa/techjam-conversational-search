@@ -22,6 +22,58 @@ implementations can be added behind the stable interfaces in
 `shopping_copilot/core/interfaces.py` and selected through config without changing
 the pipeline.
 
+## Project Overview
+
+The agent receives a short customer message and an anonymized preference profile,
+then searches a frozen 50,000-product catalog for the hidden target product. It
+maintains the requirements that are currently valid, removes preferences that the
+customer explicitly changes, retrieves candidates from the correct product category,
+and ranks them using observable evidence from product metadata. When the evidence is
+not sufficient, it asks a focused follow-up question; when it is sufficient, it
+returns a ranked recommendation slate.
+
+The implementation is deliberately deterministic and offline. This makes the
+submission reproducible under the competition's restricted final-evaluation
+environment and makes each ranking decision inspectable.
+
+## Development Tools, APIs, Libraries, and Data
+
+### Development tools
+
+- Visual Studio Code, with shared settings in `.vscode/`;
+- Git and GitHub for version control, collaboration, and public source delivery;
+- Python command-line tools for tests, data verification, and evaluation runs.
+
+### APIs and external services
+
+- **External APIs:** none. The final agent does not call OpenAI, Google, TikTok, or
+  any other network service, and it does not require an API key or live credentials.
+- **Official local interface:** the competition `starter.agent.Agent` contract,
+  implemented by `reset(session_id, user_profile)` and
+  `respond(session_id, user_message, turn, top_k)`. This is a local Python
+  interface used by the official evaluator, not an external web API.
+- **Network requirement:** none for inference or official scoring once the catalog
+  has been downloaded.
+
+### Libraries and frameworks
+
+- Python 3.10 or later;
+- Python standard library, including `dataclasses`, `json`, `pathlib`, `re`,
+  `math`, `sqlite3`, and `unittest`;
+- SQLite FTS5/BM25 for lexical candidate retrieval;
+- No third-party machine-learning framework, vector database, hosted model, or
+  external ranking service is required by the selected configuration.
+
+### Dataset and assets
+
+- The frozen 50,000-product `Clothing_Shoes_and_Jewelry` catalog;
+- 200 labeled public development sessions in `data/public_set.jsonl`;
+- Official evaluator and response contract in `evaluator/` and `docs/`;
+- Catalog source: Amazon Reviews 2023, McAuley Lab, UCSD. See
+  `DATA_ATTRIBUTION.md` for attribution and permitted-use notes;
+- No product images, private labels, private holdout sessions, credentials, or
+  other undisclosed assets are used by the agent.
+
 Run the team tests without downloading the full catalog:
 
 ```bash
@@ -92,6 +144,67 @@ The command writes per-session results and aggregate metrics to `results.json`.
 The included weak BM25 starter scores Hit Rate@10 `0.125`, MRR `0.068034`, and
 MTTC `9.81` on the released public set. See `docs/baseline_results.json`.
 
+## Installation and Reproduction
+
+### 1. Prepare Python
+
+Install Python 3.10 or later, then create an isolated environment from the
+repository root:
+
+```bash
+python -m venv .venv
+```
+
+Activate it as appropriate for your shell:
+
+```bash
+# Windows PowerShell
+.venv\\Scripts\\Activate.ps1
+
+# macOS or Linux
+source .venv/bin/activate
+```
+
+This project has no required third-party runtime packages. The following command
+is intentionally kept for reproducibility and will install the contents of the
+dependency manifest if that policy changes:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+### 2. Obtain and verify the catalog
+
+Download the official `catalog.jsonl.gz` release asset, extract it, and place the
+result at `data/catalog.jsonl`. Verify it before running the agent:
+
+```bash
+python scripts/verify_data.py --catalog data/catalog.jsonl
+```
+
+The public sessions are already included at `data/public_set.jsonl`. Do not modify
+the evaluator or public labels when reproducing a score.
+
+### 3. Run tests and evaluation
+
+Run the standard-library regression suite:
+
+```bash
+python -m unittest discover -s tests -p "test*.py" -v
+```
+
+Run the selected `main` configuration against the official public set:
+
+```bash
+python -m scripts.run_evaluation \\
+  --config configs/final.json \\
+  --output results.json
+```
+
+The output contains per-session results and aggregate Hit@10, MRR, MTTC,
+Efficiency, and TechnicalScore metrics. The recorded `main`/E27 results are
+development evidence only and are not a guarantee of private-set performance.
+
 ## Agent Interface
 
 ```python
@@ -133,7 +246,46 @@ Only exact `parent_asin` equality produces a hit. Core metrics are also reported
 
 ## Model Choice and Cost
 
-Teams may use any legally accessible LLM API or local model. Teams manage their own credentials and must never commit API keys. Model choice, estimated cost, token usage, and latency must be disclosed. Token usage is a feasibility metric, not part of the core technical score. The organizer does not provide or reimburse model API credits; teams are responsible for any costs incurred through optional external services.
+This selected configuration uses no LLM or external model API. It runs locally with
+zero model tokens and zero external API cost; reported model usage is therefore
+zero. Runtime latency depends on the local machine and catalog storage. The source
+tree contains no API keys or credentials.
+
+## Limitations and Future Work
+
+The current implementation is a strong, reproducible competition baseline, but it
+is not a complete production shopping system:
+
+- State interpretation is primarily rule-based and lexical. Unseen paraphrases,
+  spelling errors, multilingual input, and highly implicit preferences may not be
+  interpreted as reliably as they would be by a validated semantic parser.
+- Product evidence comes from catalog metadata only. The system does not use
+  images, reviews, click history, inventory, shipping, or real-time price data.
+- Budget is handled as a ranking preference/soft constraint to avoid discarding a
+  correct result because of noisy parsing or borderline prices; complicated ranges,
+  currency expressions, and ambiguous budget wording remain edge cases.
+- The deterministic policy and weights were developed and checked on the released
+  public data and controlled development experiments. Private-set performance may
+  differ.
+- There is no online learning or personalization from real user feedback.
+
+With more time, we would add a calibrated semantic parser with an offline fallback,
+broader paraphrase and multilingual stress tests, richer product-quality signals,
+online user studies, and monitoring for ranking fairness, latency, and drift.
+
+## Team Contributions
+
+The team divided work by ownership while reviewing the end-to-end integration
+together:
+
+| Members | Contribution |
+| --- | --- |
+| 高哲、刘滨 | MVP architecture, end-to-end implementation, and performance optimization |
+| 陈润中 | Evaluation-data validation, data-quality checks, and construction of additional test sets |
+| 舒子烜、赵宇嘉 | Algorithm and system optimization, regression validation, and demo/video production |
+
+Detailed module ownership and review boundaries are documented in
+`docs/team/ownership.md`.
 
 ## Files
 
@@ -158,3 +310,11 @@ evaluator/local_evaluator.py      public-set simulator and scorer
 
 The catalog and sessions are derived from Amazon Reviews 2023 by McAuley Lab, UCSD. See `DATA_ATTRIBUTION.md` before using or redistributing the data.
 Sessions are sampled deterministically from the official Clothing 5-core leave-last-out split and joined to the frozen catalog.
+
+## Submission Checklist
+
+Before submitting through Devpost, verify that the project page contains the
+written solution description and technology disclosure, links to this public
+repository, and the required public three-minute YouTube demonstration. Ensure
+that the metrics, selected configuration, Git commit, and limitations described on
+Devpost match this repository.
