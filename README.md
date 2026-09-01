@@ -196,9 +196,7 @@ python -m unittest discover -s tests -p "test*.py" -v
 Run the selected `main` configuration against the official public set:
 
 ```bash
-python -m scripts.run_evaluation \\
-  --config configs/final.json \\
-  --output results.json
+python -m scripts.run_evaluation --config configs/final.json --output results.json
 ```
 
 The output contains per-session results and aggregate Hit@10, MRR, MTTC,
@@ -248,8 +246,12 @@ Only exact `parent_asin` equality produces a hit. Core metrics are also reported
 
 This selected configuration uses no LLM or external model API. It runs locally with
 zero model tokens and zero external API cost; reported model usage is therefore
-zero. Runtime latency depends on the local machine and catalog storage. The source
-tree contains no API keys or credentials.
+zero. Runtime latency depends on the local machine and catalog storage. In a local
+reproduction using Python 3.12.10 and the frozen 50,000-product catalog, the complete
+200-session public evaluation finished in 57.981 seconds (approximately 0.290 seconds
+per session, including one-time catalog loading). This is a hardware-dependent
+reference, not a guaranteed service-level latency. The source tree contains no API
+keys or credentials.
 
 ## Limitations and Future Work
 
@@ -280,9 +282,9 @@ together:
 
 | Members | Contribution |
 | --- | --- |
-| 高哲、刘滨 | MVP architecture, end-to-end implementation, and performance optimization |
-| 陈润中 | Evaluation-data validation, data-quality checks, and construction of additional test sets |
-| 舒子烜、赵宇嘉 | Algorithm and system optimization, regression validation, and demo/video production |
+| Zhe Gao, Bin Liu | MVP architecture, end-to-end implementation, and performance optimization |
+| Runzhong Chen | Evaluation-data validation, data-quality checks, and construction of additional test sets |
+| Zixuan Shu, Yujia Zhao | Algorithm and system optimization, regression validation, and demo/video production |
 
 Detailed module ownership and review boundaries are documented in
 `docs/team/ownership.md`.
@@ -302,9 +304,9 @@ evaluator/local_evaluator.py      public-set simulator and scorer
 ## Judging and Submission Policy
 
 - Participant submission requirements: `docs/submission_rules.md`
-- Organizer-only final judging controls: `organizer/JUDGING_RUNBOOK.md`
-- Organizer private release checklist: `organizer/private_release_checklist.md`
-- Judging day operations SOP: `organizer/JUDGING_DAY_SOP.md`
+- Devpost-ready written description: `docs/devpost_submission_description.md`
+- Final submission compliance checklist: `docs/submission_compliance_checklist.md`
+- Official event page: https://tiktoktechjam2026.devpost.com/
 
 ## Data Source
 
