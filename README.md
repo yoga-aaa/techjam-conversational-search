@@ -284,7 +284,8 @@ together:
 | --- | --- |
 | Zhe Gao, Bin Liu | MVP architecture, end-to-end implementation, and performance optimization |
 | Runzhong Chen | Evaluation-data validation, data-quality checks, and construction of additional test sets |
-| Zixuan Shu, Yujia Zhao | Algorithm and system optimization, regression validation, and demo/video production |
+| Zixuan Shu | Algorithm and system optimization, regression validation, and project narrative development |
+| Yujia Zhao | Algorithm optimization and demo/video planning, production, and editing |
 
 Detailed module ownership and review boundaries are documented in
 `docs/team/ownership.md`.

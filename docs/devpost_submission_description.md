@@ -103,8 +103,10 @@ signals, online user studies, and monitoring for latency, fairness, and drift.
   performance optimization.
 - **Runzhong Chen:** evaluation-data validation, data-quality checks, and
   construction of additional test sets.
-- **Zixuan Shu and Yujia Zhao:** algorithm and system optimization, regression
-  validation, and demo/video production.
+- **Zixuan Shu:** algorithm and system optimization, regression validation, and
+  development of the project's technical narrative and submission story.
+- **Yujia Zhao:** algorithm optimization and end-to-end demo/video planning,
+  production, and editing.
 
 ## Public links
 
